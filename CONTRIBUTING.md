@@ -59,6 +59,10 @@ If you changed installers or the chart, also run the matching `scripts/test-*.sh
 
 - **Changelog:** add user-visible changes to the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md).
 
+## How pull requests land
+
+This repository is published from the maintainer's working copy, so accepted pull requests are applied there and arrive here in the next sync. GitHub will show your PR as **closed** rather than merged, with a comment linking the commit that contains it. You stay credited as the commit author.
+
 ## Larger changes
 
 For a new feature or a change in behaviour, open an issue first, so the approach can be agreed before you write a lot of code. Explain the problem, the proposed design, and what it means for existing installs (schema, configuration, agents). If the change rests on a significant design choice, add an entry to the [decision log](docs/design/decisions.md) in the same PR.
