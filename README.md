@@ -1,8 +1,16 @@
 # Heimdall
 
+[![CI](https://github.com/ohallord/heimdall/actions/workflows/ci.yml/badge.svg)](https://github.com/ohallord/heimdall/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+![Status: 0.x](https://img.shields.io/badge/status-0.x%20early-orange)
+
 **Self-hosted monitoring and security console for small fleets.** One hub and lightweight agents that only dial out. Heimdall watches your servers, containers and Kubernetes clusters, gathers security findings, logs, OpenTelemetry traces and network events, and tells you when something needs attention.
 
 Built for home labs, small teams and on-prem servers that want one operator console instead of five tools.
+
+Heimdall combines server monitoring, container and Kubernetes health, vulnerability scanning, log-based intrusion detection, OpenTelemetry APM and alerting in a single self-hosted app. If you have looked at Netdata, Zabbix, Wazuh, Uptime Kuma or a Prometheus + Grafana + Loki stack and wanted something smaller that also covers security, this is what Heimdall is for.
+
+> **Not to be confused with** the [Heimdall application dashboard](https://github.com/linuxserver/Heimdall), a homepage for links to your self-hosted apps. This Heimdall is a monitoring and security console.
 
 > **Status: early (0.x).** Heimdall runs in production on its maintainers' own infrastructure. Expect rough edges and breaking changes before 1.0. Read the [known limitations](docs/design/security-model.md#known-limitations) before exposing a hub to the internet.
 
