@@ -53,7 +53,6 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
   const [gitlabToken, setGitlabToken] = useState("");
 
   const [totpUri, setTotpUri] = useState<string | null>(null);
-  const [totpSecret, setTotpSecret] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
 
@@ -183,7 +182,6 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
     setError(null);
     try {
       const data = await post("/api/v1/auth/mfa/totp/enroll", { action: "start" });
-      setTotpSecret(data.secret);
       setTotpUri(data.uri);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed");

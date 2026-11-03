@@ -6,4 +6,4 @@ In short: be respectful, assume good intent, welcome newcomers, and keep discuss
 
 ## Reporting
 
-If you experience or witness unacceptable behaviour, contact the maintainers privately at **CONDUCT_CONTACT_EMAIL**. Reports are handled confidentially. The maintainers will review each report and respond with the actions described in the Contributor Covenant's enforcement guidelines (correction, warning, temporary ban, or permanent ban).
+If you experience or witness unacceptable behaviour, report it privately to the maintainer, [@ohallord](https://github.com/ohallord), through GitHub: use **Report content** on the comment, issue or pull request involved and choose to report it to the repository maintainers, or [report the account to GitHub](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam) for anything that needs GitHub's own trust and safety team. Reports are handled confidentially. The maintainers will review each report and respond with the actions described in the Contributor Covenant's enforcement guidelines (correction, warning, temporary ban, or permanent ban).

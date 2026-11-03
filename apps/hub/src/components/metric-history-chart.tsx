@@ -77,7 +77,9 @@ export function MetricHistoryChart({
   }
 
   useEffect(() => {
-    void loadRange(rangeMs);
+    // Defer so the load's state updates do not run synchronously inside the effect.
+    const id = setTimeout(() => void loadRange(rangeMs), 0);
+    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial + metric/mount
   }, [agentId, metric, mount]);
 
