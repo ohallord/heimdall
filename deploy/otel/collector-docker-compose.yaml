@@ -1,0 +1,67 @@
+# OpenTelemetry Collector — Docker Compose sidecar / Docker host metrics → Heimdall
+#
+# One command: scripts/install-otelcol-docker.sh (adds root_path: /hostfs, runs the container).
+#
+# Example compose service:
+#   otel-collector:
+#     image: otel/opentelemetry-collector-contrib:0.111.0
+#     volumes:
+#       - ./deploy/otel/collector-docker-compose.yaml:/etc/otelcol/config.yaml:ro
+#       - /var/run/docker.sock:/var/run/docker.sock:ro
+#     environment:
+#       HEIMDALL_OTLP_ENDPOINT: http://hub:3000
+#       HEIMDALL_OTEL_TOKEN: ${HEIMDALL_OTEL_TOKEN}
+#     command: ["--config=/etc/otelcol/config.yaml"]
+#     ports: ["127.0.0.1:4317:4317", "127.0.0.1:4318:4318"]   # app OTLP traces
+
+receivers:
+  # Apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+      memory:
+      filesystem:
+      load:
+  # Optional: docker stats when sock is mounted
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 30s
+    timeout: 20s
+
+processors:
+  batch:
+    timeout: 10s
+  resource:
+    attributes:
+      - key: service.name
+        value: heimdall-docker-metrics
+        action: upsert
+
+exporters:
+  otlphttp/heimdall:
+    endpoint: ${env:HEIMDALL_OTLP_ENDPOINT}
+    encoding: json
+    headers:
+      Authorization: "Bearer ${env:HEIMDALL_OTEL_TOKEN}"
+    compression: none
+    timeout: 10s
+
+service:
+  pipelines:
+    metrics:
+      receivers: [hostmetrics, docker_stats]
+      processors: [resource, batch]
+      exporters: [otlphttp/heimdall]
+    traces:
+      # No resource processor: keep each app's own service.name.
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/heimdall]

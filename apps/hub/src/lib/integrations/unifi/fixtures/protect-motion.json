@@ -1,0 +1,21 @@
+{
+  "alarm": {
+    "name": "Front porch motion",
+    "sources": [],
+    "conditions": [
+      {
+        "condition": {
+          "type": "is",
+          "source": "motion"
+        }
+      }
+    ],
+    "triggers": [
+      {
+        "key": "motion",
+        "device": "74ACB99F4E24"
+      }
+    ]
+  },
+  "timestamp": 1722526793954
+}

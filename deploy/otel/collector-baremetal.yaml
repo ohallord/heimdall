@@ -1,0 +1,84 @@
+# OpenTelemetry Collector — bare metal / VM hostmetrics + journal logs → Heimdall
+#
+# Env:
+#   HEIMDALL_OTLP_ENDPOINT  e.g. https://hub.example.com  (origin; /v1/metrics, /v1/logs, /v1/traces appended)
+#   HEIMDALL_OTEL_TOKEN     hdo_… from Settings → Integrations
+# Optional:
+#   HEIMDALL_AGENT_ID       agt_… to mirror CPU/mem and bind log_events.agent_id
+#
+# Install: scripts/install-otelcol.sh (writes this file + systemd unit; install-baremetal.sh calls it)
+# Manual:  otelcol-contrib --config deploy/otel/collector-baremetal.yaml
+#
+# Log filters (edit after install, or let install-otelcol.sh template):
+#   journald.units — leave empty for all units (noisy); prefer an allow-list
+#   filelog.include — optional extra files (e.g. /var/log/myapp/*.log)
+
+receivers:
+  # Apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4317
+      http:
+        endpoint: 127.0.0.1:4318
+
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+      memory:
+      filesystem:
+      load:
+      network:
+
+  journald:
+    # Empty = all units (high volume). Prefer an allow-list, e.g.:
+    # units: [sshd.service, nginx.service, myapp.service]
+    units: []
+    start_at: end
+
+  filelog:
+    # Disabled by default (empty include). Example:
+    # include: [/var/log/myapp/*.log]
+    include: []
+    start_at: end
+
+processors:
+  batch:
+    timeout: 10s
+  resource:
+    attributes:
+      - key: service.name
+        value: heimdall-host
+        action: upsert
+      # Uncomment to mirror CPU/mem and bind OTEL logs to a Heimdall agent:
+      # - key: heimdall.agent_id
+      #   value: ${env:HEIMDALL_AGENT_ID}
+      #   action: upsert
+
+exporters:
+  otlphttp/heimdall:
+    endpoint: ${env:HEIMDALL_OTLP_ENDPOINT}
+    encoding: json
+    headers:
+      Authorization: "Bearer ${env:HEIMDALL_OTEL_TOKEN}"
+    compression: none
+    timeout: 10s
+
+service:
+  pipelines:
+    metrics:
+      receivers: [hostmetrics]
+      processors: [resource, batch]
+      exporters: [otlphttp/heimdall]
+    logs:
+      # filelog with include: [] fails startup ("'include' must be specified"), so it is
+      # left out here. Set include above and use [journald, filelog] (LOG_PATHS does both).
+      receivers: [journald]
+      processors: [resource, batch]
+      exporters: [otlphttp/heimdall]
+    traces:
+      # No resource processor: keep each app's own service.name.
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/heimdall]

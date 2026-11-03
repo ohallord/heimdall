@@ -1,0 +1,7 @@
+.git
+.gitignore
+*.md
+heimdall-agent
+coverage.out
+Dockerfile
+.dockerignore

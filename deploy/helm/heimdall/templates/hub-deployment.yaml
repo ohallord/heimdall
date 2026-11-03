@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "heimdall.name" . }}-hub
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub
+spec:
+  replicas: {{ .Values.hub.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "heimdall.name" . }}
+      app.kubernetes.io/component: hub
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "heimdall.name" . }}
+        app.kubernetes.io/component: hub
+    spec:
+      containers:
+        - name: hub
+          image: {{ .Values.image.hub }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.hub.service.port }}
+              name: http
+          env:
+            {{- include "heimdall.bootstrapTokenEnv" . | nindent 12 }}
+            {{- include "heimdall.secretKeyEnv" . | nindent 12 }}
+            - name: HEIMDALL_SESSION_SECRET
+              value: {{ .Values.hub.env.HEIMDALL_SESSION_SECRET | quote }}
+            - name: HEIMDALL_PUBLIC_URL
+              value: {{ .Values.hub.env.HEIMDALL_PUBLIC_URL | quote }}
+            - name: HEIMDALL_RP_ID
+              value: {{ .Values.hub.env.HEIMDALL_RP_ID | quote }}
+            - name: HEIMDALL_ORIGIN
+              value: {{ .Values.hub.env.HEIMDALL_ORIGIN | quote }}
+            {{- if .Values.hub.env.HEIMDALL_ORG_ID }}
+            - name: HEIMDALL_ORG_ID
+              value: {{ .Values.hub.env.HEIMDALL_ORG_ID | quote }}
+            {{- end }}
+            {{- range $k, $v := (dig "extraEnv" (dict) .Values.hub) }}
+            - name: {{ $k | quote }}
+              value: {{ $v | quote }}
+            {{- end }}
+            - name: PORT
+              value: {{ .Values.hub.service.port | quote }}
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            {{- if .Values.postgres.enabled }}
+            - name: DATABASE_URL
+              value: postgres://{{ .Values.postgres.auth.username }}:{{ .Values.postgres.auth.password }}@{{ include "heimdall.name" . }}-postgres:5432/{{ .Values.postgres.auth.database }}?sslmode=disable
+            {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "heimdall.name" . }}-hub
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub
+spec:
+  type: {{ .Values.hub.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "heimdall.name" . }}
+    app.kubernetes.io/component: hub
+  ports:
+    - name: http
+      port: {{ .Values.hub.service.port }}
+      targetPort: http

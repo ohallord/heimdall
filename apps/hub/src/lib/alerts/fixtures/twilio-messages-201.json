@@ -1,0 +1,19 @@
+{
+  "sid": "SMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "date_created": "Thu, 30 Jul 2015 20:12:31 +0000",
+  "date_updated": "Thu, 30 Jul 2015 20:12:33 +0000",
+  "date_sent": null,
+  "account_sid": "ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "to": "+15558675310",
+  "from": "+15017122661",
+  "body": "[Heimdall] Agent offline: edge-01 silent",
+  "status": "queued",
+  "num_segments": "1",
+  "direction": "outbound-api",
+  "api_version": "2010-04-01",
+  "price": null,
+  "price_unit": "USD",
+  "error_code": null,
+  "error_message": null,
+  "uri": "/2010-04-01/Accounts/ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Messages/SMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"
+}

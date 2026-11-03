@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next / build
+apps/hub/.next/
+apps/hub/out/
+apps/hub/.turbo/
+dist/
+build/
+*.tsbuildinfo
+
+# go
+apps/agent/heimdall-agent
+apps/agent/coverage.out
+*.exe
+*.test
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# ide / os
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# logs / coverage
+coverage/
+*.log
+.npm/
+
+# docker
+deploy/docker/.env

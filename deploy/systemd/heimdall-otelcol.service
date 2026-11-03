@@ -1,0 +1,19 @@
+[Unit]
+Description=Heimdall OpenTelemetry Collector (bare metal)
+Documentation=https://github.com/ohallord/heimdall
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Root simplifies journald access on bare metal; harden later with
+# SupplementaryGroups=systemd-journal if running as a dedicated user.
+EnvironmentFile=-/etc/heimdall/otel.env
+ExecStart=/usr/local/bin/otelcol-contrib --config=/etc/heimdall/otel-collector.yaml
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

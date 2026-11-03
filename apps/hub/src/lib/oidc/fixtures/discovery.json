@@ -1,0 +1,7 @@
+{
+  "issuer": "https://idp.test/realms/heimdall",
+  "authorization_endpoint": "https://idp.test/realms/heimdall/protocol/openid-connect/auth",
+  "token_endpoint": "https://idp.test/realms/heimdall/protocol/openid-connect/token",
+  "userinfo_endpoint": "https://idp.test/realms/heimdall/protocol/openid-connect/userinfo",
+  "jwks_uri": "https://idp.test/realms/heimdall/protocol/openid-connect/certs"
+}

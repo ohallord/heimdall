@@ -1,0 +1,29 @@
+{{- if .Values.otel.beyla.enabled }}
+{{- $b := .Values.otel.beyla }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "heimdall.name" . }}-beyla
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beyla
+data:
+  beyla.yaml: |
+    discovery:
+      instrument:
+        {{- range $b.namespaces }}
+        - k8s_namespace: {{ . | quote }}
+        {{- end }}
+      exclude_instrument:
+        # The hub receives the collector's OTLP POSTs; tracing it would feed back on itself.
+        - k8s_deployment_name: {{ printf "%s-hub" (include "heimdall.name" .) | quote }}
+        {{- range $b.excludeNamespaces }}
+        - k8s_namespace: {{ . | quote }}
+        {{- end }}
+    attributes:
+      kubernetes:
+        enable: true
+    otel_traces_export:
+      endpoint: http://{{ include "heimdall.name" . }}-otelcol:4318
+      protocol: http/protobuf
+{{- end }}

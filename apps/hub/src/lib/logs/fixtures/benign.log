@@ -1,0 +1,4 @@
+Oct 21 00:15:01 edge systemd[1]: Starting Daily man-db regeneration...
+Oct 21 00:15:02 edge CRON[101]: (root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1)
+Oct 21 00:15:03 edge sshd[2001]: Accepted publickey for deploy from 10.0.0.8 port 52240 ssh2
+Oct 21 00:15:04 edge kernel: Ext4-fs (sda1): mounted filesystem with ordered data mode

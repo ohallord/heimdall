@@ -1,0 +1,93 @@
+{{- if .Values.otel.beyla.enabled }}
+{{- $c := .Values.otel.collector }}
+{{- $b := .Values.otel.beyla }}
+{{- if not (and $c.enabled $c.traces (ne $c.mode "sidecar")) }}
+{{- fail "otel.beyla.enabled requires otel.collector.enabled=true, otel.collector.traces=true and mode=daemonset" }}
+{{- end }}
+# Grafana Beyla eBPF auto-instrumentation. Gives HTTP/gRPC server+client spans for
+# apps without an OTel SDK (Plex, Jellyfin, Emby, Syncthing...). Spans go to the node-local
+# collector Service, which forwards them to the hub as OTLP/JSON.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "heimdall.name" . }}-beyla
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beyla
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "heimdall.name" . }}-beyla
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beyla
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, nodes]
+    verbs: [list, watch, get]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list, watch, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "heimdall.name" . }}-beyla
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beyla
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "heimdall.name" . }}-beyla
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "heimdall.name" . }}-beyla
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "heimdall.name" . }}-beyla
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beyla
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "heimdall.name" . }}
+      app.kubernetes.io/component: beyla
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "heimdall.name" . }}
+        app.kubernetes.io/component: beyla
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/beyla-config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "heimdall.name" . }}-beyla
+      hostPID: true
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: beyla
+          image: {{ $b.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          env:
+            - name: BEYLA_CONFIG_PATH
+              value: /etc/beyla/beyla.yaml
+          volumeMounts:
+            - name: beyla-config
+              mountPath: /etc/beyla
+              readOnly: true
+          resources:
+            {{- toYaml $b.resources | nindent 12 }}
+      volumes:
+        - name: beyla-config
+          configMap:
+            name: {{ include "heimdall.name" . }}-beyla
+{{- end }}

@@ -1,0 +1,6 @@
+{
+  "sub": "user-1",
+  "email": "oidc.user@example.com",
+  "name": "OIDC User",
+  "preferred_username": "oidc.user"
+}

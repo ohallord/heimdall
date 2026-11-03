@@ -1,0 +1,160 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  hub:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/hub
+    steps:
+      - uses: actions/checkout@v4
+      - name: No shipped default bootstrap token
+        working-directory: .
+        run: ./scripts/check-no-default-token.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/hub/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  agent:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+      - run: go test ./...
+      - run: go build -o /tmp/heimdall-agent ./cmd/agent
+
+  handshake:
+    runs-on: ubuntu-latest
+    needs: [hub, agent]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/hub/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+      - name: Install hub deps and build
+        working-directory: apps/hub
+        run: |
+          npm ci
+          npm run build
+      - name: Handshake smoke
+        env:
+          HEIMDALL_DB_DRIVER: pglite
+          HEIMDALL_SESSION_SECRET: heimdall-dev-session-secret-change-me!!
+        run: ./scripts/handshake-smoke.sh
+
+  images:
+    runs-on: ubuntu-latest
+    needs: [hub, agent]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build hub image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/hub
+          push: false
+          tags: heimdall/hub:ci
+          load: true
+          build-contexts: |
+            agent=apps/agent
+            scripts=scripts
+            deploy=deploy
+          build-args: |
+            AGENT_VERSION=${{ github.sha }}
+      - name: Hub image serves agent downloads
+        run: |
+          docker run --rm --entrypoint sh heimdall/hub:ci -c \
+            "cd /app/dist && sha256sum -c SHA256SUMS && grep -q heimdall-agent-linux-amd64 SHA256SUMS && grep -q heimdall-agent-linux-arm64 SHA256SUMS && grep -q install-host.sh SHA256SUMS"
+      - name: Build agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/agent
+          push: false
+          tags: heimdall/agent:ci
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+      - name: Chart refuses to render without a bootstrap token
+        run: |
+          if helm template heimdall deploy/helm/heimdall >/dev/null 2>/tmp/no-token.err; then
+            echo "chart rendered without HEIMDALL_BOOTSTRAP_TOKEN" >&2; exit 1
+          fi
+          grep -q "HEIMDALL_BOOTSTRAP_TOKEN" /tmp/no-token.err
+      - run: helm lint deploy/helm/heimdall --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=ci-test-token
+      - name: Helm template dry-run (client-side)
+        run: |
+          # helm install --dry-run still probes the API server in CI images
+          # without a cluster; template is the reliable client-side dry-run.
+          helm template heimdall deploy/helm/heimdall --debug --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=ci-test-token >/tmp/heimdall-manifests.yaml
+          grep -q 'kind: ServiceAccount' /tmp/heimdall-manifests.yaml
+          grep -q 'kind: ClusterRole' /tmp/heimdall-manifests.yaml
+          grep -q 'kind: ClusterRoleBinding' /tmp/heimdall-manifests.yaml
+          grep -q 'HEIMDALL_CLUSTER_ID' /tmp/heimdall-manifests.yaml
+          grep -q 'HEIMDALL_ENABLE_K8S' /tmp/heimdall-manifests.yaml
+          grep -q 'name: agent-state' /tmp/heimdall-manifests.yaml
+          grep -q 'name: HEIMDALL_SECRET_KEY' /tmp/heimdall-manifests.yaml
+          grep -q 'hub-secret-key' /tmp/heimdall-manifests.yaml
+          helm template heimdall deploy/helm/heimdall --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=ci-test-token --set-string hub.extraEnv.HEIMDALL_ALLOW_PRIVATE_HOSTS=gitlab.lan | grep -q 'HEIMDALL_ALLOW_PRIVATE_HOSTS'
+          grep -q 'name: host-root' /tmp/heimdall-manifests.yaml
+          grep -q 'path: "/"' /tmp/heimdall-manifests.yaml
+          grep -q 'HEIMDALL_WATCH_MOUNTS' /tmp/heimdall-manifests.yaml
+          grep -q '/host,/host/var' /tmp/heimdall-manifests.yaml
+          test -s /tmp/heimdall-manifests.yaml
+      - name: Helm hostMounts partial -f (empty hostRoot/mountPath defaults)
+        run: |
+          printf '%s\n' \
+            'agent:' \
+            '  hostMounts:' \
+            '    enabled: true' \
+            '    watchMounts: [/host, /host/var]' \
+            >/tmp/host-mounts.yaml
+          helm template heimdall deploy/helm/heimdall --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=ci-test-token -f /tmp/host-mounts.yaml >/tmp/hm.yaml
+          grep -A2 'name: host-root' /tmp/hm.yaml | grep -q 'mountPath: "/host"'
+          grep -A3 'hostPath:' /tmp/hm.yaml | grep -q 'path: "/"'
+          # Empty --set must still render valid hostPath (sprig default).
+          helm template heimdall deploy/helm/heimdall \
+            --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=ci-test-token \
+            --set agent.hostMounts.enabled=true \
+            --set agent.hostMounts.hostRoot= \
+            --set agent.hostMounts.mountPath= >/tmp/hm-empty.yaml
+          grep -A3 'hostPath:' /tmp/hm-empty.yaml | grep -q 'path: "/"'
+          grep -A2 'name: host-root' /tmp/hm-empty.yaml | grep -q 'mountPath: "/host"'
+      - name: Helm OTel collector
+        run: ./scripts/test-helm-otel.sh
+      - name: deploy-cluster.sh keeps new chart defaults on upgrade
+        run: ./scripts/test-deploy-cluster-helm.sh
+      - name: deploy-cluster.sh fails closed when k3s import needs sudo
+        run: ./scripts/test-deploy-cluster-import.sh
+      - name: OTel install scripts
+        run: |
+          ./scripts/test-install-otelcol.sh
+          ./scripts/test-install-otel-k8s.sh
+          ./scripts/test-install-host.sh

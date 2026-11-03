@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f4f6f8;
+  --foreground: #161616;
+  --surface: #ffffff;
+  --border: #c6c6c6;
+  --muted: #525252;
+  --signal: #007d79;
+  --signal-soft: #9ef0f0;
+  --ok: #198038;
+  --warn: #b28600;
+  --danger: #da1e28;
+  --grid: rgba(22, 22, 22, 0.04);
+}
+
+body {
+  color: var(--foreground);
+  background:
+    linear-gradient(180deg, #eef2f5 0%, var(--background) 40%, #ebeff3 100%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 23px,
+      var(--grid) 24px
+    );
+  font-family: var(--font-ibm-plex-sans), "IBM Plex Sans", sans-serif;
+}
+
+code,
+.mono {
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", monospace;
+}

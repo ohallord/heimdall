@@ -1,0 +1,4 @@
+Oct 21 00:14:01 edge dockerd: container start xmrig/xmrig:latest
+Oct 21 00:14:02 edge xmrig: connecting to stratum+tcp://pool.supportxmr.com:3333
+Oct 21 00:14:03 edge xmrig: using Cryptonight algorithm --donate-level=1
+Oct 21 00:14:20 edge systemd: Started Daily apt download activities.

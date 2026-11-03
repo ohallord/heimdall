@@ -1,0 +1,121 @@
+image:
+  hub: heimdall/hub:0.0.1
+  agent: heimdall/agent:0.0.1
+  pullPolicy: IfNotPresent
+
+hub:
+  replicaCount: 1
+  # Preferred over a plaintext token: a pre-created Secret holding the bootstrap token.
+  #   kubectl -n heimdall create secret generic heimdall-bootstrap --from-literal=bootstrap-token=$(openssl rand -hex 32)
+  existingSecret:
+    name: ""
+    key: bootstrap-token
+  # Encryption key for secrets at rest (HEIMDALL_SECRET_KEY, 32 bytes hex/base64).
+  # Default: the chart generates <release>-hub-secret-key once and keeps it across upgrades.
+  # BACK IT UP. Or bring your own: secretKey.existingSecret, or env.HEIMDALL_SECRET_KEY.
+  secretKey:
+    existingSecret: ""
+    key: key
+  # Extra hub environment variables, e.g. HEIMDALL_ALLOW_PRIVATE_HOSTS, HEIMDALL_TRUST_PROXY,
+  # HEIMDALL_RATE_LOGIN, HEIMDALL_LEGACY_TOKENS. See docs/deploy.md.
+  extraEnv: {}
+  service:
+    type: ClusterIP
+    port: 43123
+  env:
+    # REQUIRED: set with --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=$(openssl rand -hex 32)
+    # or reference a Secret via hub.existingSecret below. No default is shipped.
+    HEIMDALL_BOOTSTRAP_TOKEN: ""
+    HEIMDALL_SESSION_SECRET: heimdall-dev-session-secret-change-me!!
+    HEIMDALL_PUBLIC_URL: http://heimdall-hub:43123
+    HEIMDALL_RP_ID: localhost
+    HEIMDALL_ORIGIN: http://127.0.0.1:43123
+    # Optional: pin bootstrap-token agent register to this org id (overrides
+    # "prefer org with admins"). Leave empty to auto-select.
+    HEIMDALL_ORG_ID: ""
+
+agent:
+  enabled: true
+  hostname: helm-agent-01
+  clusterId: default
+  enableK8s: "true"
+  rbac:
+    create: true
+  # Per-agent secret persistence. Without a persistent volume every restart loses the
+  # secret and the hub answers 409 hostname_in_use until the agent is re-enrolled.
+  state:
+    dir: /var/lib/heimdall
+    runAsUser: 70   # 70 for alpine images, 999 for debian
+  # Set to Unconfined if the host AppArmor denies signals between postgres processes
+  # (kernel 7.0.0-42 + containerd default profile: "could not signal for checkpoint").
+  appArmorProfile: ""
+  persistence:
+      enabled: true
+      size: 16Mi
+      storageClass: ""
+  # Host disk watch for single-node / k3s labs: bind host / at /host (readOnly)
+  # and watch /host,/host/var. /boot is intentionally omitted (often a small
+  # ESP; presence alerts are noisy in-cluster). Disable on multi-tenant clusters
+  # that disallow hostPath.
+  hostMounts:
+    enabled: true
+    # Joined to HEIMDALL_WATCH_MOUNTS with commas. Prefer a YAML list — Helm
+    # --set/--set-string still split on commas inside a single string value.
+    # Override: -f values, or --set agent.hostMounts.watchMounts[0]=/host …
+    watchMounts:
+      - /host
+      - /host/var
+    # hostPath: host root → container /host (readOnly). Nested /var is visible
+    # under /host/var when the host has / mounted here; no separate /var volume.
+    hostRoot: "/"
+    mountPath: "/host"
+
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  persistence:
+    enabled: true   # false = emptyDir (data lost on restart)
+    size: 2Gi
+    storageClass: ""
+  auth:
+    username: heimdall
+    password: heimdall
+    database: heimdall
+
+# OpenTelemetry Collector shipping node metrics (+ container logs) to the hub's /v1/metrics, /v1/logs.
+# Mint the ingest token in Settings → Integrations → OTLP, then either set existingSecret or token.
+otel:
+  collector:
+    enabled: false
+    # daemonset: one per node (hostmetrics + container logs).
+    # sidecar: extra container in the agent pod (hostmetrics only; no log tailing).
+    mode: daemonset
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    # Hub origin; the exporter appends /v1/metrics and /v1/logs. Empty = in-cluster hub Service.
+    endpoint: ""
+    # Preferred: pre-created Secret holding the hdo_… token.
+    existingSecret:
+      name: ""
+      key: otel-token
+    # Convenience: chart creates a Secret from this value (ends up in Helm release state).
+    token: ""
+    # Tail /var/log/pods (daemonset mode only).
+    logs: true
+    # Receive app OTLP traces on 4317/4318 via a node-local Service (daemonset only).
+    traces: true
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 256Mi}
+  # eBPF auto-instrumentation (Grafana Beyla) for apps with no OTel SDK
+  # (Plex, Jellyfin, Emby, Syncthing...). Needs kernel >= 5.8 with BTF and a privileged
+  # hostPID DaemonSet. Requires otel.collector.enabled + traces (daemonset mode).
+  beyla:
+    enabled: false
+    image: grafana/beyla:3.38.0
+    # Namespaces whose workloads are instrumented (globs).
+    namespaces: ["*"]
+    # Extra namespaces to skip (k8s system namespaces and the Heimdall hub are always skipped).
+    excludeNamespaces: []
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 512Mi}

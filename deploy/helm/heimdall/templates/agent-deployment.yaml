@@ -1,0 +1,88 @@
+{{- if .Values.agent.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "heimdall.name" . }}-agent
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  replicas: 1
+  # RWO state volume: never run two agent pods at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "heimdall.name" . }}
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "heimdall.name" . }}
+        app.kubernetes.io/component: agent
+    spec:
+      securityContext:
+        fsGroup: 65532 # distroless nonroot; makes the state volume writable
+      {{- if .Values.agent.rbac.create }}
+      serviceAccountName: {{ include "heimdall.name" . }}-agent
+      {{- end }}
+      containers:
+        - name: agent
+          image: {{ .Values.image.agent }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["run", "--interval", "15s"]
+          env:
+            - name: HEIMDALL_HUB_URL
+              value: http://{{ include "heimdall.name" . }}-hub:{{ .Values.hub.service.port }}
+            {{- include "heimdall.bootstrapTokenEnv" . | nindent 12 }}
+            - name: HEIMDALL_HOSTNAME
+              value: {{ .Values.agent.hostname | quote }}
+            - name: HEIMDALL_WATCH_MOUNTS
+              {{- if .Values.agent.hostMounts.enabled }}
+              value: {{ include "heimdall.watchMountsEnv" . | quote }}
+              {{- else }}
+              value: "/,/boot,/var"
+              {{- end }}
+            - name: HEIMDALL_CLUSTER_ID
+              value: {{ .Values.agent.clusterId | quote }}
+            - name: HEIMDALL_ENABLE_K8S
+              value: {{ .Values.agent.enableK8s | quote }}
+            - name: HEIMDALL_STATE_DIR
+              value: {{ include "heimdall.agentState.dir" . | quote }}
+          volumeMounts:
+            - name: agent-state
+              mountPath: {{ include "heimdall.agentState.dir" . | quote }}
+          {{- if .Values.agent.hostMounts.enabled }}
+            - name: host-root
+              mountPath: {{ include "heimdall.hostMounts.mountPath" . | quote }}
+              readOnly: true
+              # Propagate nested host mounts (e.g. separate /var) under /host.
+              mountPropagation: HostToContainer
+          {{- end }}
+        {{- if and .Values.otel.collector.enabled (eq .Values.otel.collector.mode "sidecar") }}
+        {{- include "heimdall.otel.container" (dict "root" . "logs" false) | nindent 8 }}
+        {{- end }}
+      volumes:
+        {{- if and .Values.otel.collector.enabled (eq .Values.otel.collector.mode "sidecar") }}
+        - name: otelcol-config
+          configMap:
+            name: {{ include "heimdall.name" . }}-otelcol
+        - name: otel-hostfs
+          hostPath:
+            path: /
+            type: Directory
+        {{- end }}
+        - name: agent-state
+          {{- if (eq (include "heimdall.agentState.persistent" .) "true") }}
+          persistentVolumeClaim:
+            claimName: {{ include "heimdall.name" . }}-agent-state
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- if .Values.agent.hostMounts.enabled }}
+        - name: host-root
+          hostPath:
+            path: {{ include "heimdall.hostMounts.hostRoot" . | quote }}
+            type: Directory
+      {{- end }}
+{{- end }}

@@ -1,0 +1,74 @@
+import { mutating } from "@/lib/http-guard/mutating";
+import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
+import {
+  ensureIntegrationToken,
+  getIntegrationToken,
+  rotateIntegrationToken,
+} from "@/lib/integrations/tokens";
+
+export const dynamic = "force-dynamic";
+
+const WEBHOOK_PATH = "/api/v1/integrations/unifi/webhook";
+
+export async function GET() {
+  try {
+    const session = await requireSession({ permission: "agents:read" });
+    const orgId = session.orgId!;
+    let row = await getIntegrationToken(orgId, "unifi_webhook");
+    let minted: string | null = null;
+    if (!row) {
+      const ensured = await ensureIntegrationToken({
+        orgId,
+        kind: "unifi_webhook",
+      });
+      row = ensured.row;
+      minted = ensured.token;
+    }
+    return NextResponse.json({
+      webhookPath: WEBHOOK_PATH,
+      tokenHint: row.token_hint,
+      createdAt: row.created_at,
+      ...(minted ? { token: minted } : {}),
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "error" },
+      { status },
+    );
+  }
+}
+
+async function postHandler(request: Request) {
+  try {
+    const session = await requireSession({ permission: "settings:write" });
+    const body = (await request.json().catch(() => ({}))) as {
+      rotate?: boolean;
+    };
+    if (!body.rotate) {
+      return NextResponse.json(
+        { error: "pass { rotate: true } to mint a new token" },
+        { status: 400 },
+      );
+    }
+    const { row, token } = await rotateIntegrationToken({
+      orgId: session.orgId!,
+      kind: "unifi_webhook",
+    });
+    return NextResponse.json({
+      webhookPath: WEBHOOK_PATH,
+      tokenHint: row.token_hint,
+      createdAt: row.created_at,
+      token,
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "error" },
+      { status },
+    );
+  }
+}
+
+export const POST = mutating(postHandler);

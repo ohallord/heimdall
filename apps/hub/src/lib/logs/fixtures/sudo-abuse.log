@@ -1,0 +1,4 @@
+Oct 21 00:12:01 edge sudo: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/bin/bash
+Oct 21 00:12:10 edge sudo: unknown : user NOT in sudoers file ; TTY=pts/1 ; PWD=/tmp ; USER=root ; COMMAND=/bin/cat /etc/shadow
+Oct 21 00:12:11 edge sudo: pam_unix(sudo:auth): authentication failure; logname=unknown uid=1001 euid=0 tty=/dev/pts/1 ruser=unknown rhost=
+Oct 21 00:12:30 edge CRON[99]: (root) CMD (/usr/lib/sysstat/sa1 1 1)

@@ -1,0 +1,24 @@
+[Unit]
+Description=Heimdall agent
+Documentation=https://github.com/ohallord/heimdall
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=heimdall
+Group=heimdall
+EnvironmentFile=-/etc/heimdall/agent.env
+# Override ExecStart if the binary lives elsewhere (e.g. /opt/heimdall/bin/heimdall-agent).
+ExecStart=/usr/local/bin/heimdall-agent run
+Restart=always
+RestartSec=5
+# Hardening (tune for Docker socket / hostPath needs)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/heimdall
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

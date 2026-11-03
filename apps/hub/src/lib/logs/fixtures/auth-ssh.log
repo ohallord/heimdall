@@ -1,0 +1,6 @@
+Oct 21 00:10:01 edge sshd[1201]: Accepted publickey for deploy from 10.0.0.8 port 52222 ssh2
+Oct 21 00:10:14 edge sshd[1208]: Failed password for root from 203.0.113.50 port 43321 ssh2
+Oct 21 00:10:15 edge sshd[1209]: Failed password for invalid user admin from 203.0.113.50 port 43322 ssh2
+Oct 21 00:10:16 edge sshd[1210]: Invalid user git from 198.51.100.9 port 51001
+Oct 21 00:10:20 edge sshd[1211]: pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.50
+Oct 21 00:11:00 edge systemd[1]: Started Session 42 of user deploy.

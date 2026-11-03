@@ -1,0 +1,48 @@
+{
+  "data": {
+    "project": {
+      "vulnerabilities": {
+        "nodes": [
+          {
+            "id": "gid://gitlab/Vulnerability/1001",
+            "title": "Improper Neutralization of Special Elements used in an SQL Command",
+            "severity": "HIGH",
+            "state": "DETECTED",
+            "webUrl": "https://gitlab.example/acme/app/-/security/vulnerabilities/1001",
+            "primaryIdentifier": {
+              "externalType": "cve",
+              "externalId": "CVE-2024-12345",
+              "name": "CVE-2024-12345"
+            },
+            "location": {
+              "dependency": {
+                "package": { "name": "pg" },
+                "version": "8.5.0"
+              },
+              "file": "package-lock.json"
+            }
+          },
+          {
+            "id": "gid://gitlab/Vulnerability/1002",
+            "title": "Container image openssl issue",
+            "severity": "MEDIUM",
+            "state": "CONFIRMED",
+            "webUrl": "https://gitlab.example/acme/app/-/security/vulnerabilities/1002",
+            "primaryIdentifier": {
+              "externalType": "cve",
+              "externalId": "CVE-2023-0286",
+              "name": "CVE-2023-0286"
+            },
+            "location": {
+              "image": "registry.example/acme/app:1.2.3",
+              "dependency": {
+                "package": { "name": "openssl" },
+                "version": "1.1.1n"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

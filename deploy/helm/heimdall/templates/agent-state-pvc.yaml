@@ -1,0 +1,19 @@
+{{- if and .Values.agent.enabled (eq (include "heimdall.agentState.persistent" .) "true") }}
+# Holds the per-agent secret (/var/lib/heimdall/agent-secret). Losing it makes the
+# next restart fail with 409 hostname_in_use until an admin re-enrolls the agent.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "heimdall.name" . }}-agent-state
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with (include "heimdall.agentState.storageClass" .) }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ include "heimdall.agentState.size" . }}
+{{- end }}

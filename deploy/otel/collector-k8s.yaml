@@ -1,0 +1,58 @@
+# OpenTelemetry Collector — Kubernetes DaemonSet hostmetrics → Heimdall
+#
+# Apply as a ConfigMap + DaemonSet (or use the OpenTelemetry Operator).
+# Set HEIMDALL_OTLP_ENDPOINT / HEIMDALL_OTEL_TOKEN via Secret.
+# For per-node agent mirroring, inject heimdall.agent_id via the Operator
+# or a downward API annotation mapped into the resource processor.
+#
+# Full cluster metrics (kubeletstats, k8s_cluster) can be added later;
+# hostmetrics is the durable baseline.
+
+receivers:
+  # Apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  hostmetrics:
+    collection_interval: 30s
+    root_path: /hostfs
+    scrapers:
+      cpu:
+      memory:
+      filesystem:
+      load:
+      network:
+
+processors:
+  batch:
+    timeout: 10s
+  resource:
+    attributes:
+      - key: service.name
+        value: heimdall-k8s-node-metrics
+        action: upsert
+
+exporters:
+  otlphttp/heimdall:
+    endpoint: ${env:HEIMDALL_OTLP_ENDPOINT}
+    encoding: json
+    headers:
+      Authorization: "Bearer ${env:HEIMDALL_OTEL_TOKEN}"
+    compression: none
+    timeout: 10s
+
+service:
+  pipelines:
+    metrics:
+      receivers: [hostmetrics]
+      processors: [resource, batch]
+      exporters: [otlphttp/heimdall]
+    traces:
+      # No resource processor: keep each app's own service.name.
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/heimdall]

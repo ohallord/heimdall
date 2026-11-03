@@ -1,0 +1,108 @@
+{{- if .Values.postgres.enabled }}
+{{- $persist := (dig "persistence" (dict) .Values.postgres) | default (dict "enabled" true "size" "2Gi") }}
+{{- if $persist.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "heimdall.name" . }}-postgres-data
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if $persist.storageClass }}
+  storageClassName: {{ $persist.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $persist.size | default "2Gi" }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "heimdall.name" . }}-postgres
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "heimdall.name" . }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "heimdall.name" . }}
+        app.kubernetes.io/component: postgres
+    spec:
+      # Run as the image's postgres uid so docker-entrypoint skips gosu (gosu spins
+      # at 100% CPU on some hosts and Postgres never starts). 70 = alpine, 999 = debian.
+      securityContext:
+        runAsUser: {{ .Values.postgres.runAsUser | default 70 }}
+        runAsGroup: {{ .Values.postgres.runAsUser | default 70 }}
+        fsGroup: {{ .Values.postgres.runAsUser | default 70 }}
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          {{- if .Values.postgres.appArmorProfile }}
+          securityContext:
+            appArmorProfile:
+              type: {{ .Values.postgres.appArmorProfile }}
+          {{- end }}
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.auth.username | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.postgres.auth.password | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.auth.database | quote }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.auth.username | quote }}, "-d", {{ .Values.postgres.auth.database | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.auth.username | quote }}, "-d", {{ .Values.postgres.auth.database | quote }}]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          {{- if $persist.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "heimdall.name" . }}-postgres-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "heimdall.name" . }}-postgres
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "heimdall.name" . }}
+    app.kubernetes.io/component: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}

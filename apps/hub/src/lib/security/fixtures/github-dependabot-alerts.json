@@ -1,0 +1,36 @@
+[
+  {
+    "number": 42,
+    "state": "open",
+    "html_url": "https://github.com/acme/widgets/security/dependabot/42",
+    "dependency": {
+      "package": { "ecosystem": "npm", "name": "minimist" },
+      "manifest_path": "package-lock.json"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-xvch-5gv4-984h",
+      "cve_id": "CVE-2021-44906",
+      "summary": "Prototype Pollution in minimist",
+      "severity": "critical",
+      "description": "Sanitized Dependabot advisory fixture."
+    },
+    "security_vulnerability": {
+      "vulnerable_version_range": "< 1.2.6",
+      "first_patched_version": { "identifier": "1.2.6" }
+    }
+  },
+  {
+    "number": 7,
+    "state": "fixed",
+    "html_url": "https://github.com/acme/widgets/security/dependabot/7",
+    "dependency": {
+      "package": { "ecosystem": "npm", "name": "old-pkg" },
+      "manifest_path": "package-lock.json"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-fixed-ignore",
+      "summary": "Already fixed",
+      "severity": "low"
+    }
+  }
+]

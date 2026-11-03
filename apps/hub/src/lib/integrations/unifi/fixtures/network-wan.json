@@ -1,0 +1,16 @@
+{
+  "app": "network",
+  "customContent": null,
+  "deviceEventClassId": "101",
+  "message": "Internet connection lost on WAN1. Gateway: UDM-Pro.",
+  "name": "Internet Disconnected",
+  "parameters": {
+    "UNIFIcategory": "Internet",
+    "UNIFIsubCategory": "WAN",
+    "UNIFIhost": "UDM-Pro",
+    "UNIFIutcTime": "2026-10-22T18:00:00.000Z"
+  },
+  "severity": 3,
+  "version": "9.3.0",
+  "alarm_id": "01993ab8-13af-7710-872c-d6a0eceda27a"
+}

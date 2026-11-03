@@ -1,0 +1,157 @@
+{{- if .Values.otel.collector.enabled }}
+{{- $c := .Values.otel.collector }}
+{{- if not (or $c.existingSecret.name $c.token) }}
+{{- fail "otel.collector.enabled requires otel.collector.existingSecret.name or otel.collector.token" }}
+{{- end }}
+{{- $daemon := ne $c.mode "sidecar" }}
+{{- $logs := and $daemon $c.logs }}
+{{- $traces := and $daemon $c.traces }}
+{{- if not $c.existingSecret.name }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "heimdall.otel.secretName" . }}
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otelcol
+type: Opaque
+stringData:
+  otel-token: {{ $c.token | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "heimdall.name" . }}-otelcol
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otelcol
+data:
+  config.yaml: |
+    receivers:
+      hostmetrics:
+        collection_interval: 30s
+        root_path: /hostfs
+        scrapers:
+          cpu:
+          memory:
+          filesystem:
+          load:
+          network:
+      {{- if $traces }}
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      {{- end }}
+      {{- if $logs }}
+      filelog:
+        include: [/var/log/pods/*/*/*.log]
+        exclude: [/var/log/pods/{{ .Release.Namespace }}_{{ include "heimdall.name" . }}-otelcol*/*/*.log]
+        start_at: end
+        include_file_path: true
+      {{- end }}
+    processors:
+      batch:
+        timeout: 10s
+      resource:
+        attributes:
+          - key: service.name
+            value: heimdall-k8s-node-metrics
+            action: upsert
+          - key: k8s.node.name
+            value: ${env:K8S_NODE_NAME}
+            action: upsert
+    exporters:
+      otlphttp/heimdall:
+        endpoint: ${env:HEIMDALL_OTLP_ENDPOINT}
+        encoding: json
+        headers:
+          Authorization: "Bearer ${env:HEIMDALL_OTEL_TOKEN}"
+        compression: none
+        timeout: 10s
+    service:
+      pipelines:
+        metrics:
+          receivers: [hostmetrics]
+          processors: [resource, batch]
+          exporters: [otlphttp/heimdall]
+        {{- if $logs }}
+        logs:
+          receivers: [filelog]
+          processors: [batch]
+          exporters: [otlphttp/heimdall]
+        {{- end }}
+        {{- if $traces }}
+        traces:
+          # No resource processor: keep each app's own service.name.
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlphttp/heimdall]
+        {{- end }}
+{{- if $daemon }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "heimdall.name" . }}-otelcol
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otelcol
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "heimdall.name" . }}
+      app.kubernetes.io/component: otelcol
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "heimdall.name" . }}
+        app.kubernetes.io/component: otelcol
+    spec:
+      tolerations:
+        - operator: Exists
+      containers:
+        {{- include "heimdall.otel.container" (dict "root" . "logs" $logs "traces" $traces) | nindent 8 }}
+      volumes:
+        - name: otelcol-config
+          configMap:
+            name: {{ include "heimdall.name" . }}-otelcol
+        - name: otel-hostfs
+          hostPath:
+            path: /
+            type: Directory
+        {{- if $logs }}
+        - name: otel-pod-logs
+          hostPath:
+            path: /var/log/pods
+            type: DirectoryOrCreate
+        {{- end }}
+{{- if $traces }}
+---
+# Apps send OTLP to the collector on their own node:
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://{{ include "heimdall.name" . }}-otelcol.{{ .Release.Namespace }}:4318
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "heimdall.name" . }}-otelcol
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otelcol
+spec:
+  internalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: {{ include "heimdall.name" . }}
+    app.kubernetes.io/component: otelcol
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+{{- end }}
+{{- end }}
+{{- end }}

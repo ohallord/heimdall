@@ -1,0 +1,136 @@
+name: heimdall
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: heimdall
+      POSTGRES_PASSWORD: heimdall
+      POSTGRES_DB: heimdall
+    ports:
+      - "54329:5432"
+    volumes:
+      - heimdall_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heimdall -d heimdall"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  hub:
+    # Explicit tag so deploy-cluster can retag to heimdall-hub:<gitsha>.
+    image: heimdall-hub:latest
+    build:
+      context: ../../apps/hub
+      dockerfile: Dockerfile
+      # The hub image builds and serves agent binaries + host installers.
+      additional_contexts:
+        agent: ../../apps/agent
+        scripts: ../../scripts
+        deploy: ../../deploy
+      args:
+        # Prefer CLI --build-arg from deploy-cluster.sh; compose .env can pin this to 0.
+        CACHEBUST: ${CACHEBUST:-0}
+        AGENT_VERSION: ${AGENT_VERSION:-dev}
+    environment:
+      HEIMDALL_BOOTSTRAP_TOKEN: "${HEIMDALL_BOOTSTRAP_TOKEN:?set HEIMDALL_BOOTSTRAP_TOKEN in .env (openssl rand -hex 32)}"
+      HEIMDALL_SESSION_SECRET: heimdall-dev-session-secret-change-me!!
+      # REQUIRED: encrypts TOTP/OIDC/alert/SCM secrets at rest. BACK IT UP (losing it = re-entering every secret).
+      HEIMDALL_SECRET_KEY: "${HEIMDALL_SECRET_KEY:?set HEIMDALL_SECRET_KEY in .env (openssl rand -hex 32)}"
+      HEIMDALL_PUBLIC_URL: http://127.0.0.1:43123
+      # HTTP Compose: keep session cookies non-Secure (see cookieSecure()).
+      HEIMDALL_COOKIE_SECURE: "false"
+      # Lab kill switch: set true to stop all outbound SMTP/Slack/Discord/SMS.
+      HEIMDALL_ALERTS_PAUSED: "${HEIMDALL_ALERTS_PAUSED:-false}"
+      HEIMDALL_RP_ID: localhost
+      HEIMDALL_ORIGIN: http://127.0.0.1:43123
+      DATABASE_URL: postgres://heimdall:heimdall@postgres:5432/heimdall?sslmode=disable
+      PORT: "43123"
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "43123:43123"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agent:
+    # Explicit local tag (no public registry yet). Wizard snippets use this name.
+    image: heimdall-agent:latest
+    build:
+      context: ../../apps/agent
+      dockerfile: Dockerfile
+      args:
+        CACHEBUST: ${CACHEBUST:-0}
+    environment:
+      HEIMDALL_HUB_URL: http://hub:43123
+      HEIMDALL_BOOTSTRAP_TOKEN: "${HEIMDALL_BOOTSTRAP_TOKEN:?set HEIMDALL_BOOTSTRAP_TOKEN in .env (openssl rand -hex 32)}"
+      HEIMDALL_HOSTNAME: compose-agent-01
+      HEIMDALL_INTERVAL: 10s
+      # Lab has no cluster. Quoted "false" is intentional — do not use ${…} here:
+      # a shell/.env HEIMDALL_ENABLE_K8S=true would otherwise win via interpolation
+      # and the agent would still log k8s=true after rebuild.
+      HEIMDALL_ENABLE_K8S: "false"
+      # Only watch / inside the agent container ( /boot often missing → false mount alerts).
+      HEIMDALL_WATCH_MOUNTS: /
+      DOCKER_HOST_SOCKET: /var/run/docker.sock
+    # Belt-and-suspenders for older agent images where --enable-k8s defaulted true
+    # and overrode env. Explicit flag works on both old and post-#16 binaries.
+    command: ["run", "--interval", "10s", "--enable-k8s", "false"]
+    # Image defaults to distroless nonroot; host docker.sock is usually 660 root:docker.
+    # Lab default runs as root so container scrape works. For nonroot instead:
+    #   export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+    #   HEIMDALL_AGENT_USER=65532:65532 docker compose up
+    # (and keep group_add below).
+    user: "${HEIMDALL_AGENT_USER:-0:0}"
+    group_add:
+      - "${DOCKER_GID:-999}"
+    volumes:
+      # Host engine API for container metrics (host/register work without this).
+      - /var/run/docker.sock:/var/run/docker.sock
+      - agent_state:/var/lib/heimdall
+    depends_on:
+      - hub
+    restart: unless-stopped
+
+  # Optional host posture: docker compose --profile with-trivy up
+  # Distroless agent still has no Trivy — bind-mount a host Trivy binary (or
+  # replace image with a custom build that includes it).
+  agent-posture:
+    profiles: ["with-trivy"]
+    image: heimdall-agent:latest
+    build:
+      context: ../../apps/agent
+      dockerfile: Dockerfile
+      args:
+        CACHEBUST: ${CACHEBUST:-0}
+    environment:
+      HEIMDALL_HUB_URL: http://hub:43123
+      HEIMDALL_BOOTSTRAP_TOKEN: "${HEIMDALL_BOOTSTRAP_TOKEN:?set HEIMDALL_BOOTSTRAP_TOKEN in .env (openssl rand -hex 32)}"
+      HEIMDALL_HOSTNAME: compose-agent-posture
+      HEIMDALL_INTERVAL: 10s
+      HEIMDALL_ENABLE_K8S: "false"
+      HEIMDALL_WATCH_MOUNTS: /host,/host/var
+      HEIMDALL_HOST_ROOT: /host
+      HEIMDALL_HOST_POSTURE: "1"
+      HEIMDALL_HOST_POSTURE_INTERVAL: 24h
+      HEIMDALL_TRIVY_BIN: /usr/local/bin/trivy
+      DOCKER_HOST_SOCKET: /var/run/docker.sock
+    command: ["run", "--interval", "10s", "--enable-k8s", "false"]
+    user: "${HEIMDALL_AGENT_USER:-0:0}"
+    group_add:
+      - "${DOCKER_GID:-999}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:ro
+      - agent_posture_state:/var/lib/heimdall
+      # Host-installed Trivy (adjust path for your machine):
+      - ${TRIVY_HOST_BIN:-/usr/local/bin/trivy}:/usr/local/bin/trivy:ro
+    depends_on:
+      - hub
+    restart: unless-stopped
+
+volumes:
+  heimdall_pg:
+  # Per-agent secrets (one state dir per agent; losing it means re-enrolling the host).
+  agent_state:
+  agent_posture_state:
