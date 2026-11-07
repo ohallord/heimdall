@@ -1,3 +1,9 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/heimdall-wordmark-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/brand/heimdall-wordmark-light.svg">
+  <img src="assets/brand/heimdall-wordmark-light.svg" alt="Heimdall — Bifrost Beacon" width="520">
+</picture>
+
 # Heimdall
 
 [![CI](https://github.com/ohallord/heimdall/actions/workflows/ci.yml/badge.svg)](https://github.com/ohallord/heimdall/actions/workflows/ci.yml)
