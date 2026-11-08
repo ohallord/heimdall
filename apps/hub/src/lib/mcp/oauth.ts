@@ -134,7 +134,19 @@ function attr(value: string): string {
 
 function page(title: string, body: string, status = 200, headers?: Headers): Response {
   const response = new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title></head><body><main><h1>${title}</h1>${body}</main></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>
+:root{--bg:#f4f6f8;--fg:#161616;--surface:#fff;--border:#c6c6c6;--muted:#525252;--signal:#007d79;--danger:#da1e28}
+body{margin:0;min-height:100vh;color:var(--fg);background:linear-gradient(180deg,#eef2f5 0%,var(--bg) 40%,#ebeff3 100%);font-family:"IBM Plex Sans",system-ui,sans-serif}
+main{max-width:28rem;margin:0 auto;padding:2.5rem 1.5rem}
+.kicker{margin:0;font-family:ui-monospace,"IBM Plex Mono",monospace;font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;color:var(--signal)}
+h1{margin:.25rem 0 1.5rem;font-size:1.875rem;font-weight:600;letter-spacing:-.02em}
+form{display:flex;flex-direction:column;gap:1rem;border:1px solid var(--border);background:var(--surface);padding:1.25rem}
+label{display:block;font-size:.875rem}
+label span{display:block;margin-bottom:.25rem;font-family:ui-monospace,monospace;font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+input{width:100%;box-sizing:border-box;border:1px solid var(--border);padding:.5rem .75rem;font:inherit;background:#fff}
+button{align-self:flex-start;background:var(--signal);color:#fff;border:0;padding:.5rem 1rem;font:inherit;font-size:.875rem;cursor:pointer}
+.error{border:1px solid color-mix(in srgb,var(--danger) 40%,transparent);background:#fff;color:var(--danger);padding:.5rem .75rem;font-size:.875rem}
+</style></head><body><main><p class="kicker">Heimdall</p><h1>${title}</h1>${body}</main></body></html>`,
     { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
   );
   headers?.forEach((value, key) => response.headers.append(key, value));
@@ -244,7 +256,7 @@ function hidden(fields: Record<string, string>): string {
 }
 
 function loginForm(fields: Record<string, string>, error = ""): string {
-  return `${error ? `<p>${attr(error)}</p>` : ""}<form method="post" action="/oauth/authorize">${hidden({ ...fields, intent: "login" })}<label>Email <input name="email" autocomplete="username"></label><label>Password <input name="password" type="password" autocomplete="current-password"></label><label>Authenticator code <input name="code" inputmode="numeric" autocomplete="one-time-code"></label><button>Sign in</button></form>`;
+  return `${error ? `<p class="error">${attr(error)}</p>` : ""}<form method="post" action="/oauth/authorize">${hidden({ ...fields, intent: "login" })}<label><span>Email or username</span><input name="login" type="text" autocomplete="username" required></label><label><span>Password</span><input name="password" type="password" autocomplete="current-password" required></label><label><span>Authenticator code</span><input name="code" type="text" inputmode="numeric" autocomplete="one-time-code"></label><button>Sign in</button></form>`;
 }
 
 function allowForm(fields: Record<string, string>): string {
@@ -279,18 +291,18 @@ export async function oauthAuthorize(request: Request): Promise<Response> {
 
   let userId = sessionUser(request);
   if (field("intent") === "login") {
-    const email = field("email").trim().toLowerCase();
-    const hit = limit({ key: `oauth|${clientIp(request)}|${email}`, ...presetFor("LOGIN") });
+    const login = (field("login") || field("email")).trim().toLowerCase();
+    const hit = limit({ key: `oauth|${clientIp(request)}|${login}`, ...presetFor("LOGIN") });
     if (!hit.allowed) return page("Sign in", "<p>Too many attempts.</p>", 429);
-    const user = await passwordOk(email, field("password"));
-    if (!user) return page("Sign in", loginForm(fields, "Email, password, or code did not match."), 401);
+    const user = await passwordOk(login, field("password"));
+    if (!user) return page("Sign in", loginForm(fields, "Username, password, or code did not match."), 401);
     if (user.mfa_enrolled) {
       const code = field("code");
       const step = user.totp_secret ? totpStep(user.totp_secret, code) : null;
       const totpOk = step !== null && (await claimTotpStep(user.id, step));
       const recoveryOk = !totpOk && (await consumeRecoveryCode(user.id, code));
       if (!totpOk && !recoveryOk) {
-        return page("Sign in", loginForm(fields, "Email, password, or code did not match."), 401);
+        return page("Sign in", loginForm(fields, "Username, password, or code did not match."), 401);
       }
     }
     userId = user.id;

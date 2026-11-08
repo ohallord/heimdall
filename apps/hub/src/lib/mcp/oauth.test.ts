@@ -83,7 +83,7 @@ describe("heimdall mcp oauth", () => {
         body: new URLSearchParams({
           ...Object.fromEntries(query),
           intent: "login",
-          email: "dan@example.com",
+          login: "dan",
           password: "GoodPass12",
         }),
       }),
@@ -160,6 +160,10 @@ describe("heimdall mcp oauth", () => {
       new Request(`https://heimdall.drohalloran.dev/oauth/authorize?${query}`),
     );
     expect(anon.status).toBe(200);
-    expect(await anon.text()).toContain("Password");
+    const html = await anon.text();
+    expect(html).toContain("Email or username");
+    expect(html).toContain('name="login"');
+    expect(html).toContain("Password");
+    expect(html).not.toContain('type="email"');
   });
 });
