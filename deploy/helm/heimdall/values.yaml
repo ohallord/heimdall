@@ -63,10 +63,12 @@ agent:
       enabled: true
       size: 16Mi
       storageClass: ""
-  # Host disk watch for single-node / k3s labs: bind host / at /host (readOnly)
-  # and watch /host,/host/var. /boot is intentionally omitted (often a small
-  # ESP; presence alerts are noisy in-cluster). Disable on multi-tenant clusters
-  # that disallow hostPath. Off by default (hostPath of /); the single-node lab overlay
+  # Host disks for single-node / k3s labs: bind host / at /host (readOnly). The
+  # agent discovers every real filesystem under /host for display; watchMounts is
+  # only the must-present (expect) list that can raise mount_missing. Default: the
+  # host root. Add separately mounted data disks you need alerted on (e.g.
+  # /host/data). Disable on multi-tenant clusters that disallow hostPath.
+  # Off by default (hostPath of /); the single-node lab overlay
   # values-host-mounts.yaml (passed by scripts/deploy-cluster.sh) turns it on.
   hostMounts:
     enabled: false
@@ -75,9 +77,8 @@ agent:
     # Override: -f values, or --set agent.hostMounts.watchMounts[0]=/host …
     watchMounts:
       - /host
-      - /host/var
-    # hostPath: host root → container /host (readOnly). Nested /var is visible
-    # under /host/var when the host has / mounted here; no separate /var volume.
+    # hostPath: host root → container /host (readOnly). Nested host mounts show
+    # under /host/… via mountPropagation: HostToContainer.
     hostRoot: "/"
     mountPath: "/host"
 

@@ -101,10 +101,14 @@ export function samplesFromMetrics(input: MetricsIngestInput): ThresholdSample[]
     }
   }
 
-  for (const mount of input.mounts ?? []) {
-    if (!mount.present) {
-      samples.push({ metric: "mount_missing", value: 1 });
-      samples.push({ metric: `mount_missing:${mount.path}`, value: 1 });
+  // Phase 15: `mounts` is the agent's expect list. Each path reports 1 (missing) or 0
+  // (present) so alerts name the path and auto-recover. The bare metric is the host
+  // aggregate for charts (1 if any expected mount is missing); no rule fires on it.
+  if (input.mounts && input.mounts.length > 0) {
+    const anyMissing = input.mounts.some((m) => !m.present);
+    samples.push({ metric: "mount_missing", value: anyMissing ? 1 : 0 });
+    for (const mount of input.mounts) {
+      samples.push({ metric: `mount_missing:${mount.path}`, value: mount.present ? 0 : 1 });
     }
   }
 

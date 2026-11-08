@@ -20,7 +20,7 @@ Accepts a YAML list (preferred) or a legacy comma-separated string.
 {{- else if kindIs "string" $w -}}
 {{- $w -}}
 {{- else -}}
-/host,/host/var
+/host
 {{- end -}}
 {{- end -}}
 

@@ -214,7 +214,13 @@ Host mounts overlay: [`deploy/helm/heimdall/values-host-mounts.yaml`](../deploy/
 
 ### In-cluster agent host disk mounts
 
-Off by default (it is a hostPath of `/`). With `agent.hostMounts.enabled: true` (set by `values-host-mounts.yaml`, which `deploy-cluster.sh` passes) the agent Deployment bind-mounts the **host** root at `/host` (readOnly) and sets `HEIMDALL_WATCH_MOUNTS=/host,/host/var` so disk samples reflect host filesystems, not the container overlay. `/boot` is intentionally omitted. Nested mounts (e.g. a separate host `/var`) show under `/host/…` via `mountPropagation: HostToContainer`.
+Off by default (it is a hostPath of `/`). With `agent.hostMounts.enabled: true` (set by `values-host-mounts.yaml`, which `deploy-cluster.sh` passes) the agent Deployment bind-mounts the **host** root at `/host` (readOnly) and sets `HEIMDALL_WATCH_MOUNTS=/host`, so disk samples reflect host filesystems, not the container overlay. Nested host mounts (data disks, NFS, a separate `/var`) show under `/host/…` via `mountPropagation: HostToContainer`.
+
+#### Discovered vs expected mounts (Phase 15)
+
+- **Discovered** — the agent lists every real filesystem in `/proc/mounts` (under `/host` when the host root is bound there) with usage. Pseudo filesystems, `tmpfs`, snap `squashfs`, container `overlay` and same-device bind mounts are skipped; at most 64 rows. The host page's **Filesystems** table shows these, and the `disk_percent` rule covers each one.
+- **Expected** — `HEIMDALL_WATCH_MOUNTS` / `--watch-mounts` (Helm `agent.hostMounts.watchMounts`) is the must-present list. Only these paths can raise `mount_missing`, one alert per path (`mount_missing:/data`) that names the path and resolves when the mount returns.
+- **Default expect** — the host root only: `/` on bare metal, `/host` when `HEIMDALL_HOST_ROOT` is set or `/host` exists. `/boot` and `/var` are no longer expected: on most hosts they are directories on `/`, not mounts. To be alerted on a mount you depend on, add it, e.g. `HEIMDALL_WATCH_MOUNTS=/,/data`.
 
 Turn it off again (clusters that disallow hostPath):
 
@@ -225,8 +231,8 @@ helm upgrade --reuse-values heimdall deploy/helm/heimdall -n heimdall \
 
 Pick up the default host mounts on an existing homelab release (no full re-migrate).
 `watchMounts` is a **YAML list** (joined to `HEIMDALL_WATCH_MOUNTS`). Do **not** pass
-`/host,/host/var` to `--set` / `--set-string` — Helm still splits on commas
-(`key "/host/var" has no value`).
+`/host,/host/data` to `--set` / `--set-string` — Helm still splits on commas
+(`key "/host/data" has no value`).
 
 Prefer the checked-in overlay (or copy it):
 
@@ -235,16 +241,16 @@ helm upgrade --reuse-values heimdall deploy/helm/heimdall -n heimdall \
   -f deploy/helm/heimdall/values-host-mounts.yaml
 ```
 
-Or indexed `--set` (defaults already match; only needed to override):
+Or indexed `--set` (only needed to add must-present paths beyond the default `/host`):
 
 ```bash
 helm upgrade --reuse-values heimdall deploy/helm/heimdall -n heimdall \
   --set agent.hostMounts.enabled=true \
   --set 'agent.hostMounts.watchMounts[0]=/host' \
-  --set 'agent.hostMounts.watchMounts[1]=/host/var'
+  --set 'agent.hostMounts.watchMounts[1]=/host/data'
 ```
 
-The chart's `watchMounts` default is enough if you only need the stock `/host` + `/host/var` list:
+Chart defaults alone are enough if you only need the stock `/host` expect list:
 
 ```bash
 helm upgrade --reuse-values heimdall deploy/helm/heimdall -n heimdall \

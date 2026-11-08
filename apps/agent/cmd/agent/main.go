@@ -64,7 +64,7 @@ func loadConfig(args []string) config.Config {
 	token := fs.String("token", "", "Bootstrap/agent token (or HEIMDALL_BOOTSTRAP_TOKEN)")
 	hostname := fs.String("hostname", "", "Agent hostname (defaults to OS hostname)")
 	interval := fs.Duration("interval", 0, "Sample interval (or HEIMDALL_INTERVAL)")
-	watch := fs.String("watch-mounts", "", "Comma-separated mounts to watch")
+	watch := fs.String("watch-mounts", "", "Comma-separated mounts that must be present (default: host root)")
 	logPaths := fs.String("log-paths", "", "Comma-separated log files to tail (HEIMDALL_LOG_PATHS)")
 	clusterID := fs.String("cluster-id", "", "Cluster id for multi-cluster reserve (HEIMDALL_CLUSTER_ID)")
 	// Empty = defer to HEIMDALL_ENABLE_K8S / default false (do not force true).
@@ -244,7 +244,7 @@ func pushHostPosture(client *handshake.Client, agentID string) error {
 
 func runCollectOnce(args []string) {
 	cfg := loadConfig(args)
-	sample, err := collect.Collect(collect.Options{WatchMounts: cfg.WatchMounts})
+	sample, err := collect.Collect(collect.Options{WatchMounts: cfg.WatchMounts, HostRoot: vulns.ResolveHostRoot()})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "collect failed: %v\n", err)
 		os.Exit(1)
@@ -451,7 +451,7 @@ func runScanHost(args []string) {
 }
 
 func pushSample(client *handshake.Client, agentID string, cfg config.Config) error {
-	sample, err := collect.Collect(collect.Options{WatchMounts: cfg.WatchMounts})
+	sample, err := collect.Collect(collect.Options{WatchMounts: cfg.WatchMounts, HostRoot: vulns.ResolveHostRoot()})
 	if err != nil {
 		return err
 	}
@@ -665,7 +665,7 @@ func printUsage() {
 Usage:
   heimdall-agent register [--hub URL] [--token TOKEN] [--hostname NAME] [--cluster-id ID]
   heimdall-agent run [--hub URL] [--token TOKEN] [--hostname NAME] [--interval 10s] [--cluster-id ID]
-  heimdall-agent collect [--watch-mounts /, /boot]
+  heimdall-agent collect [--watch-mounts /,/data]
   heimdall-agent scan-image --image NAME [--hub URL] [--token TOKEN]
   heimdall-agent scan-host [--root PATH] [--hub URL] [--token TOKEN]
   heimdall-agent watch-logs [--log-paths /var/log/auth.log] [--hub URL] [--token TOKEN]

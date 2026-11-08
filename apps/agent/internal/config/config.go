@@ -73,7 +73,7 @@ func Load(over Overrides) (Config, error) {
 		cfg.Interval = parseInterval(os.Getenv("HEIMDALL_INTERVAL"), 10*time.Second)
 	}
 
-	watch := firstNonEmpty(over.WatchMounts, os.Getenv("HEIMDALL_WATCH_MOUNTS"), "/,/boot,/var")
+	watch := firstNonEmpty(over.WatchMounts, os.Getenv("HEIMDALL_WATCH_MOUNTS"))
 	for _, part := range strings.Split(watch, ",") {
 		part = strings.TrimSpace(part)
 		if part != "" {

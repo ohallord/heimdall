@@ -180,6 +180,7 @@ export type MountMetric = {
 export type DiskMetric = {
   mountPoint: string;
   device: string;
+  fsType?: string;
   totalBytes: number;
   usedBytes: number;
   freeBytes: number;

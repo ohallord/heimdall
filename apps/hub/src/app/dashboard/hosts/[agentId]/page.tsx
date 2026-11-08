@@ -6,6 +6,7 @@ import { Sparkline } from "@/components/sparkline";
 import { bandDotClass, bandTextClass } from "@/lib/alerts/bands";
 import { bandForHostMetric, findHostRule } from "@/lib/alerts/host-thresholds";
 import { getSession } from "@/lib/auth/session";
+import { filesystemRowsFromJson, formatBytes } from "@/lib/metrics/mounts-display";
 import { isSetupComplete, listAlertRules } from "@/lib/db/store";
 import {
   getAgentById,
@@ -23,7 +24,6 @@ import { listFindings } from "@/lib/security/store";
 import type {
   ContainerMetric,
   K8sClusterMetric,
-  MountMetric,
 } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
@@ -47,9 +47,7 @@ export default async function HostDetailPage({
   const latest = await getLatestMetrics(agent.id);
   const history = await listMetricHistory(agent.id, 48);
   const online = isAgentOnline(agent.last_seen_at);
-  const mounts = latest
-    ? (JSON.parse(latest.mounts_json) as MountMetric[])
-    : [];
+  const filesystems = filesystemRowsFromJson(latest?.mounts_json, latest?.disks_json);
   const containerRow = await getLatestContainers(agent.id);
   const containers = containerRow
     ? (JSON.parse(containerRow.containers_json) as ContainerMetric[])
@@ -140,23 +138,29 @@ export default async function HostDetailPage({
 
       <section className="border border-border bg-surface">
         <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide">Mounts</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide">Filesystems</h2>
+          <p className="mt-1 text-xs text-muted">
+            Mounts the host has. Only paths marked required (agent{" "}
+            <span className="font-mono">HEIMDALL_WATCH_MOUNTS</span>) can be missing.
+          </p>
         </div>
-        {mounts.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted">No mount samples yet.</p>
+        {filesystems.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted">No filesystem samples yet.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead className="border-b border-border bg-[#f8fafb] font-mono text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-2">Path</th>
                 <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2">Present</th>
+                <th className="px-4 py-2">Required</th>
                 <th className="px-4 py-2">Used %</th>
+                <th className="px-4 py-2">Size</th>
                 <th className="px-4 py-2">FS</th>
+                <th className="px-4 py-2">Device</th>
               </tr>
             </thead>
             <tbody>
-              {mounts.map((m) => {
+              {filesystems.map((m) => {
                 const mountBand = !m.present
                   ? ("red" as const)
                   : bandForHostMetric(m.usedPercent, diskRule, 90, 98);
@@ -164,9 +168,13 @@ export default async function HostDetailPage({
                 return (
                   <tr key={m.path} className="border-b border-border last:border-0">
                     <td className="px-4 py-3 font-mono text-xs">
-                      <Link href={diskHref} className="text-signal underline">
-                        {m.path}
-                      </Link>
+                      {m.present ? (
+                        <Link href={diskHref} className="text-signal underline">
+                          {m.path}
+                        </Link>
+                      ) : (
+                        m.path
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-2">
@@ -175,22 +183,24 @@ export default async function HostDetailPage({
                           aria-hidden
                         />
                         <span className={`font-mono text-xs uppercase ${bandTextClass(mountBand)}`}>
-                          {mountBand}
+                          {m.present ? mountBand : "missing"}
                         </span>
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={m.present ? "text-ok" : "text-danger"}>
-                        {m.present ? "yes" : "missing"}
-                      </span>
+                    <td className="px-4 py-3 font-mono text-xs text-muted">
+                      {m.expected ? "yes" : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs">
-                      <Link href={diskHref} className="hover:underline">
-                        {m.usedPercent != null ? m.usedPercent.toFixed(1) : "—"}
-                      </Link>
+                      {m.usedPercent != null ? m.usedPercent.toFixed(1) : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted">
+                      {formatBytes(m.totalBytes)}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-muted">
                       {m.fsType ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted">
+                      {m.device ?? "—"}
                     </td>
                   </tr>
                 );

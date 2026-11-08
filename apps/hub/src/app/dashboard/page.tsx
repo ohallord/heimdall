@@ -28,7 +28,8 @@ import {
 } from "@/lib/metrics/k8s-status";
 import { bandDotClass } from "@/lib/alerts/bands";
 import { bandForHostMetric, findHostRule } from "@/lib/alerts/host-thresholds";
-import type { ContainerMetric, MountMetric } from "@/lib/db/types";
+import type { ContainerMetric } from "@/lib/db/types";
+import { filesystemRowsFromJson } from "@/lib/metrics/mounts-display";
 
 export const dynamic = "force-dynamic";
 
@@ -111,9 +112,7 @@ export default async function DashboardPage({
   for (const agent of agents) {
     const metrics = latestByAgent.get(agent.id);
     const online = isAgentOnline(agent.lastSeenAt);
-    const mounts = metrics
-      ? (JSON.parse(metrics.mounts_json) as MountMetric[])
-      : [];
+    const mounts = filesystemRowsFromJson(metrics?.mounts_json, metrics?.disks_json);
     const reasons: string[] = [];
     if (!online) reasons.push("offline");
     const cpuBand = bandForHostMetric(
@@ -349,9 +348,10 @@ export default async function DashboardPage({
               {agents.map((agent) => {
                 const metrics = latestByAgent.get(agent.id);
                 const online = isAgentOnline(agent.lastSeenAt);
-                const mounts = metrics
-                  ? (JSON.parse(metrics.mounts_json) as MountMetric[])
-                  : [];
+                const mounts = filesystemRowsFromJson(
+                  metrics?.mounts_json,
+                  metrics?.disks_json,
+                );
                 const missing = mounts.filter((m) => !m.present).length;
                 const cpuBand = bandForHostMetric(
                   metrics ? Number(metrics.cpu_percent) : null,

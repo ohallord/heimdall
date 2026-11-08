@@ -75,7 +75,7 @@ services:
       # a shell/.env HEIMDALL_ENABLE_K8S=true would otherwise win via interpolation
       # and the agent would still log k8s=true after rebuild.
       HEIMDALL_ENABLE_K8S: "false"
-      # Only watch / inside the agent container ( /boot often missing → false mount alerts).
+      # Expect list only (can raise mount_missing); real filesystems are discovered for display.
       HEIMDALL_WATCH_MOUNTS: /
       DOCKER_HOST_SOCKET: /var/run/docker.sock
     # Belt-and-suspenders for older agent images where --enable-k8s defaulted true
@@ -121,7 +121,7 @@ services:
       HEIMDALL_HOSTNAME: compose-agent-posture
       HEIMDALL_INTERVAL: 10s
       HEIMDALL_ENABLE_K8S: "false"
-      HEIMDALL_WATCH_MOUNTS: /host,/host/var
+      HEIMDALL_WATCH_MOUNTS: /host
       HEIMDALL_HOST_ROOT: /host
       HEIMDALL_HOST_POSTURE: "1"
       HEIMDALL_HOST_POSTURE_INTERVAL: 24h

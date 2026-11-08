@@ -151,7 +151,9 @@ jobs:
             --set agent.hostMounts.enabled=true >/tmp/hm-on.yaml
           grep -q 'name: host-root' /tmp/hm-on.yaml
           grep -q 'path: "/"' /tmp/hm-on.yaml
-          grep -q '/host,/host/var' /tmp/hm-on.yaml
+          # Phase 15: default expect list is the host root only.
+          grep -A1 'name: HEIMDALL_WATCH_MOUNTS' /tmp/hm-on.yaml | grep -q 'value: "/host"$'
+          ! grep -q '/host/var' /tmp/hm-on.yaml
           test -s /tmp/heimdall-manifests.yaml
       - name: Helm hostMounts partial -f (empty hostRoot/mountPath defaults)
         run: |

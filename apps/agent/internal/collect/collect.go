@@ -7,9 +7,12 @@ import (
 )
 
 type Options struct {
-	Reader       Reader
-	DiskUsage    DiskUsageFunc
-	WatchMounts  []string
+	Reader    Reader
+	DiskUsage DiskUsageFunc
+	// WatchMounts is the expect list: only these paths can be reported missing.
+	WatchMounts []string
+	// HostRoot scopes mount discovery ("/" bare metal, "/host" in containers).
+	HostRoot      string
 	CPUSampleWait time.Duration
 }
 
@@ -32,9 +35,13 @@ func Collect(opts Options) (HostSample, error) {
 	if diskUsage == nil {
 		diskUsage = defaultDiskUsage
 	}
+	hostRoot := opts.HostRoot
+	if hostRoot == "" {
+		hostRoot = "/"
+	}
 	watch := opts.WatchMounts
 	if len(watch) == 0 {
-		watch = DefaultWatchMounts
+		watch = DefaultExpectMounts(hostRoot)
 	}
 	wait := opts.CPUSampleWait
 	if wait == 0 {
@@ -53,7 +60,7 @@ func Collect(opts Options) (HostSample, error) {
 	if err != nil {
 		return HostSample{}, err
 	}
-	mounts, disks, err := sampleMounts(r, watch, diskUsage)
+	mounts, disks, err := sampleMounts(r, watch, hostRoot, diskUsage)
 	if err != nil {
 		return HostSample{}, err
 	}

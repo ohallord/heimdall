@@ -322,7 +322,7 @@ cmd_verify() {
     2>/dev/null || true
 
   # Distroless agent has no printenv/sh — read the Deployment spec instead.
-  log "HEIMDALL_WATCH_MOUNTS (expect /host,/host/var — no /boot)"
+  log "HEIMDALL_WATCH_MOUNTS (must-present list; default /host — no /boot, /host/var)"
   local watch mount_path host_path
   watch="$(
     kubectl -n "${K8S_NAMESPACE}" get "deploy/${RELEASE_NAME}-agent" \
@@ -344,8 +344,8 @@ cmd_verify() {
 
   if [[ -z "${watch}" ]]; then
     warn "WATCH_MOUNTS unset — re-run helm with values-host-mounts.yaml"
-  elif [[ "${watch}" == *"/boot"* ]]; then
-    warn "WATCH_MOUNTS still includes /boot — upgrade chart values"
+  elif [[ "${watch}" == *"/boot"* || "${watch}" == *"/host/var"* ]]; then
+    warn "WATCH_MOUNTS still includes /boot or /host/var (directories, not mounts, on most hosts) — upgrade chart values"
   elif [[ "${watch}" != *"/host"* ]]; then
     warn "WATCH_MOUNTS looks unexpected: ${watch}"
   else

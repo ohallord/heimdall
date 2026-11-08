@@ -61,6 +61,9 @@ describe("alert threshold engine", () => {
     const { evaluateRuleBand, ruleMatchesMetric } = await import("./engine");
     expect(ruleMatchesMetric("disk_percent", "disk_percent:/var")).toBe(true);
     expect(ruleMatchesMetric("disk_percent", "cpu_percent")).toBe(false);
+    // Phase 15: one Mount missing rule covers every expected path.
+    expect(ruleMatchesMetric("mount_missing", "mount_missing:/data")).toBe(true);
+    expect(ruleMatchesMetric("mount_missing", "disk_percent:/data")).toBe(false);
 
     const diskRule = {
       metric: "disk_percent",

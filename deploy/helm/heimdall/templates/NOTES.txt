@@ -12,7 +12,7 @@ ClusterRole read access to nodes, pods, events, pods/log, and deployments. Clust
 
 {{- if .Values.agent.hostMounts.enabled }}
 
-Host disk mounts (agent.hostMounts.enabled): host {{ include "heimdall.hostMounts.hostRoot" . }} → {{ include "heimdall.hostMounts.mountPath" . }} (readOnly); HEIMDALL_WATCH_MOUNTS={{ include "heimdall.watchMountsEnv" . }} (/boot omitted). Disable with --set agent.hostMounts.enabled=false. Override via -f (YAML list) or --set 'agent.hostMounts.watchMounts[0]=/host' --set 'agent.hostMounts.watchMounts[1]=/host/var' — never a comma-joined --set/--set-string. Partial -f without hostRoot/mountPath still defaults to / → /host.
+Host disk mounts (agent.hostMounts.enabled): host {{ include "heimdall.hostMounts.hostRoot" . }} → {{ include "heimdall.hostMounts.mountPath" . }} (readOnly); HEIMDALL_WATCH_MOUNTS={{ include "heimdall.watchMountsEnv" . }} (must-present list; all real host filesystems are discovered for display). Disable with --set agent.hostMounts.enabled=false. Override via -f (YAML list) or --set 'agent.hostMounts.watchMounts[0]=/host' --set 'agent.hostMounts.watchMounts[1]=/host/data' — never a comma-joined --set/--set-string. Partial -f without hostRoot/mountPath still defaults to / → /host.
 {{- end }}
 
 See docs/deploy.md for multi-cluster, remotes, OIDC callback, and backup.

@@ -17,6 +17,7 @@ import {
   getActiveClusterK8s,
   getLatestContainers,
   getLatestK8s,
+  ensureHostMetricRules,
   ingestAgentMetrics,
   isAgentOnline,
   listLatestK8s,
@@ -70,10 +71,15 @@ describe("metrics ingest contract", () => {
         { metric: "mem_percent", value: 40 },
         { metric: "disk_percent", value: 80 },
         { metric: "disk_percent:/var", value: 91 },
-        { metric: "mount_missing", value: 1 },
+        { metric: "mount_missing:/", value: 0 },
         { metric: "mount_missing:/data", value: 1 },
       ]),
     );
+    // Bare metric is one host aggregate for charts (no rule fires on it); the
+    // alert is raised once, by its path.
+    expect(samples.filter((s) => s.metric === "mount_missing")).toEqual([
+      { metric: "mount_missing", value: 1 },
+    ]);
   });
 
   it("records warn-only events for yellow disk without channel notify", async () => {
@@ -246,6 +252,60 @@ describe("metrics ingest contract", () => {
       };
       expect(e.message).toContain(payload.mountPath ?? "<no mountPath>");
     }
+  });
+
+  it("fires one path-qualified mount alert per missing expected path and recovers", async () => {
+    await createOrgAndAdmin({
+      orgName: "Mount Org",
+      adminName: "Admin",
+      email: "mounts@example.com",
+      password: "CorrectHorse1",
+    });
+    const registered = await registerAgentPersistent({
+      token: "test-token",
+      hostname: "edge-mounts",
+      version: "0.2.0",
+    });
+    if (!registered.ok) throw new Error("register failed");
+    const agentId = registered.agent.id;
+    const org = { id: registered.agent.org_id };
+    await ensureHostMetricRules(org.id);
+    const db = await getDb();
+    const mountRule = (
+      await db.query<{ id: string }>(
+        `SELECT id FROM alert_rules WHERE org_id = $1 AND metric = 'mount_missing'`,
+        [org.id],
+      )
+    ).rows[0];
+    expect(mountRule).toBeTruthy();
+
+    const send = (dataPresent: boolean) =>
+      ingestAgentMetrics({
+        agentId,
+        cpuPercent: 1,
+        memPercent: 1,
+        mounts: [
+          { path: "/", present: true },
+          { path: "/data", present: dataPresent },
+        ],
+      });
+
+    await send(false);
+    const open = await db.query<{ id: string; message: string; payload_json: string }>(
+      `SELECT id, message, payload_json FROM alert_events
+       WHERE org_id = $1 AND rule_id = $2 AND status = 'open'`,
+      [org.id, mountRule.id],
+    );
+    expect(open.rows).toHaveLength(1);
+    expect(open.rows[0].message).toContain("/data");
+    expect(JSON.parse(open.rows[0].payload_json).mountPath).toBe("/data");
+
+    await send(true);
+    const stillOpen = await db.query(
+      `SELECT id FROM alert_events WHERE org_id = $1 AND rule_id = $2 AND status = 'open'`,
+      [org.id, mountRule.id],
+    );
+    expect(stillOpen.rows).toHaveLength(0);
   });
 
   it("rejects unknown agents", async () => {
