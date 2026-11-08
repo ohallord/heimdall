@@ -37,6 +37,9 @@ run enroll-agent-dry-run \
 run publish-push-refusal \
   ./scripts/tests/test-publish-gates.sh
 
+run expose-mcp-ingress \
+  ./scripts/tests/test-expose-mcp.sh
+
 if [[ "$fail" -ne 0 ]]; then
   echo "FAILED $fail test group(s)" >&2
   exit 1

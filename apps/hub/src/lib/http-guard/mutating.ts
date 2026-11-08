@@ -6,7 +6,7 @@ import { assertSameOrigin, csrfDenied } from "./csrf";
  *
  * Deliberately NOT applied (token-auth, no ambient cookies; see docs/phases/phase-24-security-hardening):
  *   api/v1/agents/{register,heartbeat,metrics,logs,vulns}, api/v1/integrations/{unifi,runtime}/webhook,
- *   v1/metrics, v1/logs (OTLP).
+ *   v1/{metrics,logs,traces} (OTLP), mcp (bearer, session cookies do not authorize).
  */
 export function mutating<A extends unknown[]>(
   handler: (request: Request, ...rest: A) => Promise<Response>,

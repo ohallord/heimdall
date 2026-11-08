@@ -47,6 +47,24 @@ spec:
             - name: HEIMDALL_ORG_ID
               value: {{ .Values.hub.env.HEIMDALL_ORG_ID | quote }}
             {{- end }}
+            - name: HEIMDALL_MCP_ALLOWED_HOSTS
+              value: {{ dig "env" "HEIMDALL_MCP_ALLOWED_HOSTS" "" .Values.hub | quote }}
+            {{- $mcpExisting := dig "mcp" "existingSecret" "name" "" .Values.hub }}
+            {{- $mcpChartSecret := or (not (dig "sessionSecret" "existingSecret" "" .Values.hub)) (and .Values.postgres.enabled (not (dig "auth" "existingSecret" "" .Values.postgres))) }}
+            - name: HEIMDALL_MCP_TOKEN
+            {{- if $mcpExisting }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $mcpExisting | quote }}
+                  key: {{ dig "mcp" "existingSecret" "key" "mcp-token" .Values.hub | quote }}
+            {{- else if $mcpChartSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "heimdall.secretsName" . }}
+                  key: mcp-token
+            {{- else }}
+              value: {{ dig "env" "HEIMDALL_MCP_TOKEN" "" .Values.hub | quote }}
+            {{- end }}
             {{- range $k, $v := (dig "extraEnv" (dict) .Values.hub) }}
             - name: {{ $k | quote }}
               value: {{ $v | quote }}

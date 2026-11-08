@@ -15,4 +15,6 @@ ClusterRole read access to nodes, pods, events, pods/log, and deployments. Clust
 Host disk mounts (agent.hostMounts.enabled): host {{ include "heimdall.hostMounts.hostRoot" . }} → {{ include "heimdall.hostMounts.mountPath" . }} (readOnly); HEIMDALL_WATCH_MOUNTS={{ include "heimdall.watchMountsEnv" . }} (must-present list; all real host filesystems are discovered for display). Disable with --set agent.hostMounts.enabled=false. Override via -f (YAML list) or --set 'agent.hostMounts.watchMounts[0]=/host' --set 'agent.hostMounts.watchMounts[1]=/host/data' — never a comma-joined --set/--set-string. Partial -f without hostRoot/mountPath still defaults to / → /host.
 {{- end }}
 
+MCP (`POST /mcp`) bearer: Secret key `mcp-token` (empty unless `hub.env.HEIMDALL_MCP_TOKEN` or `hub.mcp.existingSecret` is set; an upgrade does not invent one). Host allowlist: `hub.env.HEIMDALL_MCP_ALLOWED_HOSTS`. See docs/runbooks/mcp-exposure.md.
+
 See docs/deploy.md for multi-cluster, remotes, OIDC callback, and backup.

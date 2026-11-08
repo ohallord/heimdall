@@ -15,6 +15,7 @@ const EXEMPT = new Set([
   "v1/metrics/route.ts",
   "v1/logs/route.ts",
   "v1/traces/route.ts",
+  "mcp/route.ts",
 ]);
 
 function walk(dir: string): string[] {

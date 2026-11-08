@@ -115,6 +115,8 @@ Agent log tailing (`HEIMDALL_LOG_PATHS`) refuses a path whose last component is 
 | `HEIMDALL_ALERTS_PAUSED` | Hub | `true`/`1` kills all outbound SMTP/Slack/Discord/SMS (lab emergency stop); also `POST /api/v1/alerts/pause` |
 | `HEIMDALL_BOOTSTRAP_TOKEN` | Hub + agents | First-agent / bootstrap register **and** legacy ingest (Bearer). **Required everywhere: no shipped default** (Compose and Helm refuse to start/render without it; the dev token needs `HEIMDALL_DEV=1`, never in production). Generate with `openssl rand -hex 32`. In Helm prefer `hub.existingSecret.name` (key `bootstrap-token`) over a plaintext value. |
 | `HEIMDALL_ORG_ID` | Hub | Optional pin: bootstrap-token register attaches agents to this org id (otherwise prefers an org that already has admin users) |
+| `HEIMDALL_MCP_TOKEN` | Hub | Bearer for read-only `POST /mcp`. **Empty default, never generated.** Unset or empty: only localhost / 127.0.0.1 / ::1. Generate with `openssl rand -hex 32`. Helm stores it in `<release>-secrets` key `mcp-token` (or `hub.mcp.existingSecret`). Session cookies do not authorize `/mcp`. | 
+| `HEIMDALL_MCP_ALLOWED_HOSTS` | Hub | Comma-separated Host allowlist when the MCP token is set (LAN host and the public tunnel host). Empty: any Host, bearer is the guard. Localhost is always allowed. |
 | `DATABASE_URL` | Hub | `postgres://…` (omit for PGlite/dev) |
 | `HEIMDALL_PUBLIC_URL` | Hub | Canonical public origin (OIDC + WebAuthn); use `https://` in production so session cookies are Secure |
 | `HEIMDALL_RP_ID` / `HEIMDALL_ORIGIN` | Hub | Passkey relying party |
@@ -137,7 +139,7 @@ Rate limits are in-memory, per hub process (a restart or extra replica resets/sp
 
 Setting `HEIMDALL_MAX_BODY_INGEST` replaces the default for **all** ingest routes. Rate vars are `max/windowSeconds`; invalid values fall back to the default.
 
-CSRF: session-cookie `POST/PUT/PATCH/DELETE` routes reject cross-origin browser requests (`Origin` / `Sec-Fetch-Site`) with `403`. Expected origin is `HEIMDALL_PUBLIC_URL` (else the request `Host`), so set it correctly behind a proxy. Exempt (token-auth, no cookies): `agents/{register,heartbeat,metrics,logs,vulns}`, both integration webhooks, OTLP `/v1/metrics` and `/v1/logs`.
+CSRF: session-cookie `POST/PUT/PATCH/DELETE` routes reject cross-origin browser requests (`Origin` / `Sec-Fetch-Site`) with `403`. Expected origin is `HEIMDALL_PUBLIC_URL` (else the request `Host`), so set it correctly behind a proxy. Exempt (token-auth, no cookies): `agents/{register,heartbeat,metrics,logs,vulns}`, both integration webhooks, OTLP `/v1/metrics`, `/v1/logs`, and `/v1/traces`, and bearer-only `/mcp` (see [runbooks/mcp-exposure.md](runbooks/mcp-exposure.md)).
 
 
 Never commit production secrets. Compose and Helm ship no default secrets.

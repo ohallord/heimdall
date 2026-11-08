@@ -124,6 +124,12 @@ Session requests that change state (`POST`, `PUT`, `PATCH`, `DELETE`) must come 
 
 The OTLP endpoints reject protobuf with `415`. Configure collectors with `encoding: json`.
 
+## Read-only MCP
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| POST | `/mcp` | `Authorization: Bearer` `HEIMDALL_MCP_TOKEN` | Stateless streamable HTTP. Tools only report state (`heimdall_status`, `heimdall_agents`, `heimdall_agent`, `heimdall_alerts`, `heimdall_findings`). No writes. Session cookies do not authorize this path. Missing or wrong bearer, or a non-local Host when the token is unset, is `401` with `WWW-Authenticate: Bearer realm="heimdall"`. See [MCP exposure](../runbooks/mcp-exposure.md) |
+
 ## Backup
 
 | Method | Path | Permission | Notes |

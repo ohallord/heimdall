@@ -24,6 +24,13 @@ Heimdall is configured through environment variables. Settings stored in the dat
 | `HEIMDALL_PUBLIC_BASE_URL` | `HEIMDALL_PUBLIC_URL` | Preferred base for links in alert messages |
 | `HEIMDALL_ORG_ID` | auto | Pin bootstrap-token registrations to this org ID. By default, the org that has admin users is used |
 
+### Read-only MCP
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `HEIMDALL_MCP_TOKEN` | unset | Bearer for `POST /mcp`. Unset: only `localhost`, `127.0.0.1`, and `::1`. Generate with `openssl rand -hex 32`. Do not commit it. See [MCP exposure](../runbooks/mcp-exposure.md) |
+| `HEIMDALL_MCP_ALLOWED_HOSTS` | unset | Comma-separated Host allowlist used when the token is set. List the LAN host and the public host. Empty allowlist accepts any Host |
+
 ### Agents and tokens
 
 | Variable | Default | Description |

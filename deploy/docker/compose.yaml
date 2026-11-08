@@ -46,6 +46,9 @@ services:
       HEIMDALL_COOKIE_SECURE: "false"
       # Lab kill switch: set true to stop all outbound SMTP/Slack/Discord/SMS.
       HEIMDALL_ALERTS_PAUSED: "${HEIMDALL_ALERTS_PAUSED:-false}"
+      # Read-only MCP. Empty (the default) is localhost-only and does not invent a token.
+      HEIMDALL_MCP_TOKEN: "${HEIMDALL_MCP_TOKEN:-}"
+      HEIMDALL_MCP_ALLOWED_HOSTS: "${HEIMDALL_MCP_ALLOWED_HOSTS:-}"
       HEIMDALL_RP_ID: localhost
       HEIMDALL_ORIGIN: http://127.0.0.1:43123
       # Password must be URL-safe (openssl rand -hex output is).

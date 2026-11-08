@@ -27,6 +27,12 @@ hub:
   # Extra hub environment variables, e.g. HEIMDALL_ALLOW_PRIVATE_HOSTS, HEIMDALL_TRUST_PROXY,
   # HEIMDALL_RATE_LOGIN, HEIMDALL_LEGACY_TOKENS. See docs/deploy.md.
   extraEnv: {}
+  # Read-only MCP bearer (`HEIMDALL_MCP_TOKEN`). Empty default: a chart upgrade does not
+  # invent a token. Prefer mcp.existingSecret so the value is not stored in release state.
+  mcp:
+    existingSecret:
+      name: ""
+      key: mcp-token
   service:
     type: ClusterIP
     port: 43123
@@ -42,6 +48,13 @@ hub:
     # Optional: pin bootstrap-token agent register to this org id (overrides
     # "prefer org with admins"). Leave empty to auto-select.
     HEIMDALL_ORG_ID: ""
+    # Empty: localhost-only MCP, and the chart-managed Secret stores an empty mcp-token
+    # (it is never generated). Set with --set-string hub.env.HEIMDALL_MCP_TOKEN=$(openssl rand -hex 32)
+    # or hub.mcp.existingSecret.name.
+    HEIMDALL_MCP_TOKEN: ""
+    # Comma-separated Host allowlist used when the MCP token is set. Empty accepts any Host.
+    # Helm --set-string splits on commas; use a values file or escape them (hub.lan\,mcp.example.com).
+    HEIMDALL_MCP_ALLOWED_HOSTS: ""
 
 agent:
   enabled: true
