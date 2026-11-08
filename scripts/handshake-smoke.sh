@@ -83,12 +83,16 @@ if [[ "${HTTP_CODE}" != "401" && "${HTTP_CODE}" != "403" ]]; then
   exit 1
 fi
 
-echo "==> authenticated heartbeat for ${AGENT_ID}"
-curl -fsS -X POST "${HUB_URL}/api/v1/agents/heartbeat" \
+echo "==> shared bootstrap token must not heartbeat as ${AGENT_ID} (it holds a per-agent secret)"
+HTTP_CODE="$(curl -sS -o "${LOG_DIR}/heartbeat-shared.json" -w "%{http_code}" -X POST "${HUB_URL}/api/v1/agents/heartbeat" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
-  -d "{\"agentId\":\"${AGENT_ID}\"}" | tee "${LOG_DIR}/heartbeat.json"
-echo
+  -d "{\"agentId\":\"${AGENT_ID}\"}" || true)"
+if [[ "${HTTP_CODE}" != "401" ]]; then
+  echo "expected 401 for shared-token heartbeat, got ${HTTP_CODE}" >&2
+  cat "${LOG_DIR}/heartbeat-shared.json" >&2
+  exit 1
+fi
 
 echo "==> per-agent secret: stored 0600, usable as Bearer, re-register does not 409"
 SECRET_FILE="${HEIMDALL_STATE_DIR}/agent-secret"
@@ -99,7 +103,8 @@ AGENT_SECRET="$(tr -d "[:space:]" < "${SECRET_FILE}")"
 curl -fsS -X POST "${HUB_URL}/api/v1/agents/heartbeat" \
   -H "Authorization: Bearer ${AGENT_SECRET}" \
   -H "Content-Type: application/json" \
-  -d "{\"agentId\":\"${AGENT_ID}\"}" >/dev/null
+  -d "{\"agentId\":\"${AGENT_ID}\"}" | tee "${LOG_DIR}/heartbeat.json"
+echo
 (cd "${ROOT}/apps/agent" && HEIMDALL_BOOTSTRAP_TOKEN="${TOKEN}" go run ./cmd/agent register --hub "${HUB_URL}" --hostname "${HOSTNAME_VALUE}" >/dev/null)
 
 echo "handshake smoke OK"

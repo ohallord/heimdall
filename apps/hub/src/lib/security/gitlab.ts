@@ -1,4 +1,5 @@
 import { normalizeSeverity, type NormalizedFinding } from "./types";
+import { normalizeScmPath } from "./scm-path";
 import { guardedFetch } from "@/lib/http-guard/safe-fetch";
 
 type GitlabVulnNode = {
@@ -108,6 +109,7 @@ export async function fetchGitLabVulnerabilities(input: {
     /\/$/,
     "",
   );
+  const fullPath = normalizeScmPath("gitlab", input.projectPath);
   const fetchFn = input.fetchImpl ?? guardedFetch;
   const res = await fetchFn(base, {
     method: "POST",
@@ -118,7 +120,7 @@ export async function fetchGitLabVulnerabilities(input: {
     body: JSON.stringify({
       query: GITLAB_VULNS_QUERY,
       variables: {
-        fullPath: input.projectPath,
+        fullPath,
         first: input.first ?? 50,
       },
     }),
@@ -130,6 +132,9 @@ export async function fetchGitLabVulnerabilities(input: {
   const json = (await res.json()) as GitlabGraphqlResponse;
   if (json.errors?.length) {
     throw new Error(json.errors.map((e) => e.message).join("; "));
+  }
+  if (json.data && json.data.project == null) {
+    throw new Error(`gitlab project not found: ${fullPath} (needs group/project and a read_api token)`);
   }
   return json;
 }

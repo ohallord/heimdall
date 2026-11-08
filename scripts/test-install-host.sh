@@ -109,7 +109,7 @@ grep -qi 'checksum' "$T/out" || fail "mismatch not explained"
 [[ -e "$T/bad" ]] && fail "mismatch installed something"
 
 # --- non-https hub refused without HEIMDALL_ALLOW_INSECURE=1 (loopback http allowed) ---
-for u in "http://203.0.113.10:43123" "http://heimdall.example.com" "file://$T/hub" "http://127.evil.com"; do
+for u in "http://192.168.5.8:43123" "http://heimdall.example.com" "file://$T/hub" "http://127.evil.com"; do
   set +e
   host "$T/insec" HEIMDALL_ALLOW_INSECURE=0 HUB_URL="$u" TOKEN="$TOKEN" bash ./scripts/install-host.sh >"$T/out" 2>&1; rc=$?
   set -e
@@ -140,7 +140,7 @@ env PATH="$T/bin:$PATH" DESTDIR="$T/ia" HUB_URL=http://203.0.113.10:43123 TOKEN=
   HEIMDALL_ALLOW_INSECURE=0 bash ./scripts/install-agent.sh >"$T/out" 2>&1; rc=$?
 set -e
 [[ $rc -eq 2 ]] || fail "install-agent.sh accepted public-IP http without opt-in (rc=$rc)"
-for u in http://203.0.113.10:43123 http://203.0.113.20:43123 http://heimdall.lan:43123 http://heimdall-hub:43123 http://heimdall-hub.heimdall.svc.cluster.local:43123 https://h.example.com; do
+for u in http://192.168.5.8:43123 http://10.1.2.3:43123 http://heimdall.lan:43123 http://heimdall-hub:43123 http://heimdall-hub.heimdall.svc.cluster.local:43123 https://h.example.com; do
   env PATH="$T/bin:$PATH" DESTDIR="$T/ia" HUB_URL="$u" TOKEN="$TOKEN" DRY_RUN=1 HEIMDALL_ALLOW_INSECURE=0 \
     bash ./scripts/install-agent.sh >"$T/out" 2>&1 || { cat "$T/out" >&2; fail "install-agent.sh refused $u"; }
 done

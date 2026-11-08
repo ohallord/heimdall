@@ -82,4 +82,9 @@ fi
 # domain and public IP; it must never ship.
 [[ ! -e "$SNAP/scripts/tests/test-setup-hostname.sh" ]] || { echo "snapshot ships test-setup-hostname.sh" >&2; exit 1; }
 
+# Shell test scripts use synthetic RFC1918 samples to test the hub URL rule. The IP scrub must
+# keep them, or the published test feeds 203.0.113.x to an "allowed" loop and goes red.
+grep -qF 'http://192.168.5.8:43123' "$SNAP/scripts/test-install-host.sh" \
+  || { echo "publish rewrote RFC1918 samples in scripts/test-install-host.sh" >&2; exit 1; }
+
 echo "test-publish-gates: ok"

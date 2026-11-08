@@ -130,6 +130,8 @@ fixture_skip = re.compile(
     re.I,
 )
 
+shell_test = re.compile(r"(^|/)scripts/(tests/)?test-[^/]+\.sh$")
+
 text_ext = {
   ".md",".txt",".yml",".yaml",".toml",".json",".ts",".tsx",".js",".mjs",".cjs",
   ".go",".sh",".env",".example",".css",".sql",".svg",".service",".mod",".sum",
@@ -151,7 +153,10 @@ for p in root.rglob("*"):
         data = rx.sub(repl, data)
     rel = p.relative_to(root).as_posix()
     if not fixture_skip.search(rel):
-        for rx, repl in scoped:
+        for i, (rx, repl) in enumerate(scoped):
+            # Shell tests keep their synthetic RFC1918 samples (hub URL rule); /home still scrubbed.
+            if i > 0 and shell_test.search(rel):
+                continue
             data = rx.sub(repl, data)
     if data != orig:
         p.write_text(data, encoding="utf-8")
@@ -222,6 +227,10 @@ fixture_skip = re.compile(
     r"(^|/)(fixtures)/|\.test\.[tj]sx?$|_test\.go$|\.spec\.[tj]sx?$",
     re.I,
 )
+# Shell tests (scripts/test-*.sh) may hold synthetic RFC1918 samples, but not home paths.
+shell_test = re.compile(r"(^|/)scripts/(tests/)?test-[^/]+\.sh$")
+def is_ip_rule(pat: str) -> bool:
+    return any(k in pat for k in (r"10\.", r"192\.168", r"172\.", r"100\."))
 def is_fixture_only_rule(pat: str) -> bool:
     # Private-path / RFC1918 / CGNAT rules — allowed inside synthetic fixtures.
     keys = ("/Users/", "/home/", r"10\.", r"192\.168", r"172\.", r"100\.", "/path/to")
@@ -244,9 +253,12 @@ for p in root.rglob("*"):
     except Exception:
         continue
     in_fixture = bool(fixture_skip.search(rel))
+    in_shell_test = bool(shell_test.search(rel))
     for i, line in enumerate(text.splitlines(), 1):
         for rx in patterns:
             if in_fixture and is_fixture_only_rule(rx.pattern):
+                continue
+            if in_shell_test and is_ip_rule(rx.pattern):
                 continue
             if rx.search(line):
                 print(f"DENY {rx.pattern!r} at {rel}:{i}")

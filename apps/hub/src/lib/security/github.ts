@@ -1,4 +1,5 @@
 import { normalizeSeverity, type NormalizedFinding } from "./types";
+import { normalizeScmPath } from "./scm-path";
 import { guardedFetch } from "@/lib/http-guard/safe-fetch";
 
 type DependabotAlert = {
@@ -106,7 +107,7 @@ export async function fetchGitHubDependabotAlerts(input: {
   const base = (input.apiBaseUrl ?? "https://api.github.com").replace(/\/$/, "");
   const fetchFn = input.fetchImpl ?? guardedFetch;
   const res = await fetchFn(
-    `${base}/orgs/${encodeURIComponent(input.org)}/dependabot/alerts?state=open&per_page=100`,
+    `${base}/orgs/${encodeURIComponent(normalizeScmPath("github", input.org))}/dependabot/alerts?state=open&per_page=100`,
     {
       headers: {
         accept: "application/vnd.github+json",
@@ -131,7 +132,7 @@ export async function fetchGitHubOrgAdvisories(input: {
   const base = (input.apiBaseUrl ?? "https://api.github.com").replace(/\/$/, "");
   const fetchFn = input.fetchImpl ?? guardedFetch;
   const res = await fetchFn(
-    `${base}/orgs/${encodeURIComponent(input.org)}/security-advisories?per_page=100`,
+    `${base}/orgs/${encodeURIComponent(normalizeScmPath("github", input.org))}/security-advisories?per_page=100`,
     {
       headers: {
         accept: "application/vnd.github+json",
