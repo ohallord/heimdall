@@ -40,6 +40,7 @@ describe("oidc store", () => {
       providerId: provider.id,
       sub: "admin-sub",
       email: user.email,
+      emailVerified: true,
       name: "Admin",
     });
     expect(linked.id).toBe(user.id);

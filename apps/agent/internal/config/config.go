@@ -18,6 +18,8 @@ type Config struct {
 	LogPaths    []string
 	ClusterID   string
 	EnableK8s   bool
+	// Warnings are non-fatal config notes (e.g. plain-http hub) for the caller to log.
+	Warnings []string
 }
 
 type Overrides struct {
@@ -53,6 +55,13 @@ func Load(over Overrides) (Config, error) {
 	cfg.HubURL = strings.TrimRight(cfg.HubURL, "/")
 	if cfg.HubURL == "" {
 		return Config{}, fmt.Errorf("hub URL is required")
+	}
+	warn, err := CheckHubURL(cfg.HubURL, allowInsecureFromEnv())
+	if err != nil {
+		return Config{}, err
+	}
+	if warn != "" {
+		cfg.Warnings = append(cfg.Warnings, warn)
 	}
 	if cfg.Token == "" {
 		return Config{}, fmt.Errorf("bootstrap/enrollment token is required: set --token or HEIMDALL_BOOTSTRAP_TOKEN")

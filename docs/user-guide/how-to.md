@@ -258,7 +258,7 @@ Old data is purged every 6 hours. Open alarms are never purged.
 To block SSRF, the hub refuses outbound requests to private, loopback and link-local addresses: IdPs, webhooks and GitHub/GitLab APIs. To allow a LAN service, set a narrow allowlist on the hub:
 
 ```bash
-HEIMDALL_ALLOW_PRIVATE_HOSTS=gitlab.lan,keycloak.lan,10.0.5.20
+HEIMDALL_ALLOW_PRIVATE_HOSTS=gitlab.lan,keycloak.lan,203.0.113.20
 ```
 
 Helm: `--set-string hub.extraEnv.HEIMDALL_ALLOW_PRIVATE_HOSTS=gitlab.lan`.

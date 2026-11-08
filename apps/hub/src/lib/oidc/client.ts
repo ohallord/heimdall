@@ -29,6 +29,7 @@ export type OidcTokenResponse = {
 export type OidcUserInfo = {
   sub: string;
   email?: string;
+  email_verified?: boolean;
   name?: string;
   preferred_username?: string;
 };

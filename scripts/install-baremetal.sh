@@ -40,6 +40,7 @@ Environment:
   AGENT_ID                         optional agt_… resource attribute
   LOG_UNITS                        comma-separated systemd units for journald
   LOG_PATHS                        comma-separated file globs for filelog
+  HEIMDALL_ALLOW_INSECURE=1        accept a plain-http HUB_URL (install-agent.sh refuses it otherwise)
   DRY_RUN=1                        print steps only
 USAGE
 }

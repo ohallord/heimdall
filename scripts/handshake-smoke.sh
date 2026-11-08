@@ -11,6 +11,14 @@ LOG_DIR="$(mktemp -d)"
 export HEIMDALL_STATE_DIR="${LOG_DIR}/agent-state"
 HUB_PID=""
 
+# Agent register → pushSample reads /proc (meminfo, loadavg, mounts). On Darwin
+# that path hangs or fails; use scripts/handshake-smoke-linux.sh instead.
+if [[ ! -r /proc/meminfo ]]; then
+  echo "handshake-smoke.sh: /proc/meminfo not readable (host=$(uname -s))." >&2
+  echo "Re-run via: ./scripts/handshake-smoke-linux.sh (docker + linux /proc)." >&2
+  exit 2
+fi
+
 cleanup() {
   if [[ -n "${HUB_PID}" ]] && kill -0 "${HUB_PID}" 2>/dev/null; then
     kill "${HUB_PID}" 2>/dev/null || true
@@ -33,7 +41,7 @@ echo "==> starting hub on :${HUB_PORT}"
 HEIMDALL_BOOTSTRAP_TOKEN="${TOKEN}" \
   HEIMDALL_DB_DRIVER="${HEIMDALL_DB_DRIVER:-pglite}" \
   HEIMDALL_SECRET_KEY="${HEIMDALL_SECRET_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}" \
-  HEIMDALL_SESSION_SECRET="${HEIMDALL_SESSION_SECRET:-heimdall-dev-session-secret-change-me!!}" \
+  HEIMDALL_SESSION_SECRET="${HEIMDALL_SESSION_SECRET:-ci-smoke-session-secret-test-only-not-for-production}" \
   PORT="${HUB_PORT}" \
   npm run start -- --port "${HUB_PORT}" \
   >"${LOG_DIR}/hub.log" 2>&1 &
@@ -57,9 +65,8 @@ echo
 
 echo "==> agent register + metrics ingest"
 cd "${ROOT}/apps/agent"
-REGISTER_OUT="$(go run ./cmd/agent register \
+REGISTER_OUT="$(HEIMDALL_BOOTSTRAP_TOKEN="${TOKEN}" go run ./cmd/agent register \
   --hub "${HUB_URL}" \
-  --token "${TOKEN}" \
   --hostname "${HOSTNAME_VALUE}" 2>&1)"
 echo "${REGISTER_OUT}"
 AGENT_ID="$(echo "${REGISTER_OUT}" | sed -n 's/^registered agent \([^ ]*\).*/\1/p' | head -1)"
@@ -93,6 +100,6 @@ curl -fsS -X POST "${HUB_URL}/api/v1/agents/heartbeat" \
   -H "Authorization: Bearer ${AGENT_SECRET}" \
   -H "Content-Type: application/json" \
   -d "{\"agentId\":\"${AGENT_ID}\"}" >/dev/null
-(cd "${ROOT}/apps/agent" && go run ./cmd/agent register --hub "${HUB_URL}" --token "${TOKEN}" --hostname "${HOSTNAME_VALUE}" >/dev/null)
+(cd "${ROOT}/apps/agent" && HEIMDALL_BOOTSTRAP_TOKEN="${TOKEN}" go run ./cmd/agent register --hub "${HUB_URL}" --hostname "${HOSTNAME_VALUE}" >/dev/null)
 
 echo "handshake smoke OK"

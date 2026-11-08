@@ -28,7 +28,7 @@ export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-/** Env bootstrap token reader; the accepted token is decided by matchesBootstrapToken. */
+/** Env bootstrap token reader; the accepted token is decided by matchesBootstrapToken (Phase 32). */
 export { resolveBootstrapToken } from "@/lib/agents/bootstrap";
 
 /**
@@ -111,13 +111,40 @@ export async function getSetupState() {
   return result.rows[0] ?? { current_step: "org_admin", completed: false };
 }
 
-export async function setSetupStep(step: string, completed = false) {
+/** Move the wizard forward. Never re-opens a completed setup (that is markSetupComplete's job). */
+export async function setSetupStep(step: string) {
   const db = await getDb();
   await db.query(
     `UPDATE setup_state
-     SET current_step = $1, completed = $2, updated_at = NOW()
-     WHERE id = 'singleton'`,
-    [step, completed],
+     SET current_step = $1, updated_at = NOW()
+     WHERE id = 'singleton' AND completed = FALSE`,
+    [step],
+  );
+}
+
+/**
+ * Atomically claim the first-run admin step. Exactly one caller wins, and only while no
+ * user exists anywhere on the hub. The row lock on setup_state serialises racing claims.
+ */
+export async function claimFirstAdminStep(): Promise<boolean> {
+  const db = await getDb();
+  const res = await db.query<{ id: string }>(
+    `UPDATE setup_state
+     SET current_step = 'org_admin_claimed', updated_at = NOW()
+     WHERE id = 'singleton' AND completed = FALSE AND current_step = 'org_admin'
+       AND NOT EXISTS (SELECT 1 FROM users)
+     RETURNING id`,
+  );
+  return res.rows.length === 1;
+}
+
+/** Undo a claim whose admin insert failed, so the operator can retry. */
+export async function releaseFirstAdminStep(): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    `UPDATE setup_state SET current_step = 'org_admin', updated_at = NOW()
+     WHERE id = 'singleton' AND current_step = 'org_admin_claimed'
+       AND NOT EXISTS (SELECT 1 FROM users)`,
   );
 }
 
@@ -184,12 +211,38 @@ export async function findUserByEmail(email: string): Promise<User | null> {
   return openUser(result.rows[0] ?? null);
 }
 
+// Sign-in id is the email column, or the display name when the account was
+// created as a username such as "admin" (no mailbox).
+export async function findUserByLogin(login: string): Promise<User | null> {
+  const id = login.trim().toLowerCase();
+  if (!id) return null;
+  const byEmail = await findUserByEmail(id);
+  if (byEmail) return byEmail;
+  if (id.includes("@")) return null;
+  const db = await getDb();
+  const result = await db.query<User>(
+    `SELECT * FROM users WHERE lower(name) = $1`,
+    [id],
+  );
+  if (result.rows.length !== 1) return null;
+  return openUser(result.rows[0] ?? null);
+}
+
 export async function findUserById(id: string): Promise<User | null> {
   const db = await getDb();
   const result = await db.query<User>(`SELECT * FROM users WHERE id = $1`, [
     id,
   ]);
   return openUser(result.rows[0] ?? null);
+}
+
+/** Revoke every outstanding session cookie for this user (logout, credential change). */
+export async function bumpSessionVersion(userId: string): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    `UPDATE users SET session_version = session_version + 1 WHERE id = $1`,
+    [userId],
+  );
 }
 
 export async function listUsersByOrg(orgId: string): Promise<User[]> {
@@ -731,7 +784,7 @@ export async function registerAgentPersistent(input: {
   else {
     // An installed agent re-registers on every start with its configured token plus its saved
     // secret. Once that token has expired or been revoked (or the bootstrap token rotated or
-    // disabled), the secret alone proves identity: keep the agent where it is.
+    // disabled), the secret alone proves identity: keep the agent where it is (Phase 32).
     if (presented) {
       const owner = (
         await db.query<AgentRow>(`SELECT * FROM agents WHERE secret_hash = $1 LIMIT 1`, [hashToken(presented)])
@@ -888,7 +941,10 @@ export async function markSetupComplete(orgId: string) {
     `UPDATE organizations SET setup_completed_at = NOW() WHERE id = $1`,
     [orgId],
   );
-  await setSetupStep("done", true);
+  await db.query(
+    `UPDATE setup_state SET current_step = 'done', completed = TRUE, updated_at = NOW()
+     WHERE id = 'singleton'`,
+  );
 }
 
 export async function setUserTotpSecret(userId: string, secret: string) {
@@ -944,17 +1000,30 @@ export async function consumeRecoveryCode(
 ): Promise<boolean> {
   const db = await getDb();
   const hash = hashRecoveryCode(code);
+  // Single statement: two racing requests cannot both spend the same code.
   const result = await db.query<{ id: string }>(
-    `SELECT id FROM recovery_codes
-     WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL
-     LIMIT 1`,
+    `UPDATE recovery_codes SET used_at = NOW()
+     WHERE id = (
+       SELECT id FROM recovery_codes
+       WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL
+       LIMIT 1
+     ) AND used_at IS NULL
+     RETURNING id`,
     [userId, hash],
   );
-  if (!result.rows[0]) return false;
-  await db.query(`UPDATE recovery_codes SET used_at = NOW() WHERE id = $1`, [
-    result.rows[0].id,
-  ]);
-  return true;
+  return result.rows.length === 1;
+}
+
+/** Record an accepted TOTP time step. False if this step (or a later one) was already used. */
+export async function claimTotpStep(userId: string, step: number): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.query<{ id: string }>(
+    `UPDATE users SET totp_last_step = $2
+     WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)
+     RETURNING id`,
+    [userId, step],
+  );
+  return result.rows.length === 1;
 }
 
 export async function saveWebAuthnCredential(input: {
@@ -1076,7 +1145,7 @@ function isEventMetric(metric: string): boolean {
 }
 
 /**
- * Auto-close open/muted alerts for an agent whose condition has cleared.
+ * Phase 26: auto-close open/muted alerts for an agent whose condition has cleared.
  * `breaching` = fingerprints still over threshold in this ingest; `healthy` =
  * fingerprints seen and under threshold. Continuous metrics (cpu/mem/disk) need
  * a healthy sample (a partial payload must not resolve them); event-style
@@ -1157,7 +1226,7 @@ export type ResolvedAlertEvent = {
 };
 
 /**
- * Dismiss every open/muted alert created at or before the cutoff
+ * Phase 26: dismiss every open/muted alert created at or before the cutoff
  * (olderThanDays = 0 dismisses all). Returns the number dismissed.
  */
 export async function dismissAlertEventsBulk(input: {

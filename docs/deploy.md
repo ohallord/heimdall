@@ -1,6 +1,6 @@
 # Deploying Heimdall (self-hosters)
 
-Heimdall ships three first-class install paths: **Helm** (Kubernetes), **Docker Compose** (dev / small fleets), and **standalone** (binary + systemd). For a guided walkthrough, start with the [installation guide](user-guide/installation.md); this page is the detailed reference.
+Heimdall ships three first-class install paths: **Helm** (Kubernetes), **Docker Compose** (dev / small fleets), and **standalone** (binary + systemd). License is Apache-2.0. The public tree is the allowlisted snapshot on GitHub.
 
 ## Install matrix
 
@@ -31,16 +31,16 @@ Heimdall can surface **host** OS CVEs and misconfigs via Trivy `rootfs` (finding
 | One-shot | `heimdall-agent scan-host [--root PATH]` |
 | Schedule | `HEIMDALL_HOST_POSTURE=1` in the agent env (default interval **24h**, override with `HEIMDALL_HOST_POSTURE_INTERVAL`); soft-skips if Trivy is missing |
 | Timeout | Default 10m; override `HEIMDALL_TRIVY_TIMEOUT` |
-| Helm | Keep `agent.hostMounts.enabled: true` so the agent sees host filesystems at `/host` |
+| Helm | Set `agent.hostMounts.enabled: true` (off by default; `values-host-mounts.yaml` turns it on) so the agent sees host filesystems at `/host` |
 | Compose | `docker compose --profile with-trivy up` runs `agent-posture` (host `/` → `/host`, `HEIMDALL_HOST_POSTURE=1`). Bind-mount Trivy via `TRIVY_HOST_BIN` (default `/usr/local/bin/trivy`). Or use standalone agent on the host. |
 
 UI: host detail **Security / Posture**, and **Dashboard → Security** filtered to Host posture.
 
 **How-to + one-shot script:** [`host-posture.md`](host-posture.md) · [`scripts/scan-host-posture.sh`](../scripts/scan-host-posture.sh)
 
-### One-command host install
+### One-command host install (Phase 31)
 
-Get the command from **Settings → Agents → + Add a server**: it mints a single-use, 24 h token and shows the exact `curl` line. Token rotation and the bootstrap token are covered in [runbooks/bootstrap-token.md](runbooks/bootstrap-token.md).
+Get the command from **Settings → Agents → + Add a server** (Phase 32): it mints a single-use, 24 h token and shows the exact `curl` line. Token rotation and the bootstrap token are covered in [runbooks/bootstrap-token.md](runbooks/bootstrap-token.md).
 
 The hub serves the agent for linux/amd64 and linux/arm64 plus the host installers, so a host needs no repo checkout or Go toolchain:
 
@@ -52,7 +52,9 @@ curl -fsSL https://<hub>/install.sh | sudo bash -s -- --uninstall   # PURGE=1 al
 ```
 
 - `/install.sh` has `HUB_URL` baked in from `HEIMDALL_PUBLIC_URL` (else the request origin). Set `HEIMDALL_PUBLIC_URL` when the hub sits behind a proxy.
-- Every file comes from `/downloads/<name>` and is checked against the hub's `/downloads/SHA256SUMS` before anything is installed; a mismatch installs nothing. Trust rests on TLS to the hub, so use `https://` outside a lab.
+- Every file comes from `/downloads/<name>` and is checked against the hub's `/downloads/SHA256SUMS` before anything is installed; a mismatch installs nothing. `SHA256SUMS` comes from the same hub, so on its own it only catches corruption or a truncated download, not a tampered hub or a man in the middle. Trust rests on TLS to the hub.
+- **https is required.** The installer refuses a plain `http://` hub unless it is loopback (`127.0.0.1`, `localhost`, `[::1]`). On a trusted LAN opt in with `curl -fsSL http://<hub>/install.sh | sudo HEIMDALL_ALLOW_INSECURE=1 bash`; the opt-in is written to `/etc/heimdall/agent.env` because the agent applies the same rule (it also accepts single-label / `*.svc` in-cluster names such as `http://hub:43123`).
+- **Pin the manifest** when you have the hash from another channel (release notes, another admin, a host you already trust): `curl -fsSL https://<hub>/install.sh | sudo EXPECTED_SHA256=<sha256 of SHA256SUMS> bash`. A different `SHA256SUMS` installs nothing. Get the value with `curl -fsSL https://<hub>/downloads/SHA256SUMS | sha256sum`.
 - Prefer the prompt or `TOKEN_FILE`. With `sudo TOKEN=… bash` the token is part of sudo's command line, which systemd-journald records (`_CMDLINE`) and log shippers forward. The hub redacts Heimdall tokens (`hdt_`, `hda_`, `hdb_`, `hdo_`, `hdu_`, `hdr_`) from ingested logs, but the host journal and any other log tool keep the plain value.
 - Tokens come from `TOKEN_FILE`, `TOKEN`, or a prompt on the terminal (works under `curl | bash`); `OTEL_TOKEN_FILE` / `OTEL_TOKEN` likewise. Pass-through: `HOSTNAME_VALUE`, `CLUSTER_ID`, `ENABLE_K8S`, `LOG_UNITS`, `LOG_PATHS`, `DRY_RUN=1`.
 - When a `docker` group exists the agent user joins it so container metrics work. That is root-equivalent access to Docker on that host; pass `DOCKER=0` to skip (container metrics are then skipped, logged once). Re-running the installer restarts the agent, so it also upgrades it.
@@ -90,6 +92,10 @@ HUB_URL=… TOKEN=… OTEL_TOKEN=… DRY_RUN=1 ./scripts/install-baremetal.sh
 
 Units: agent + [`deploy/systemd/heimdall-otelcol.service`](../deploy/systemd/heimdall-otelcol.service). Collector config: `/etc/heimdall/otel-collector.yaml`. Details: [`otel.md`](otel.md).
 
+The collector unit runs as the system user `heimdall-otel` (created by `install-otelcol.sh`, added to `adm` when that group exists, `SupplementaryGroups=systemd-journal` for the journal) with no capabilities and `ProtectSystem=strict` / `ProtectHome=true`. Its only writable path is `/var/lib/heimdall-otelcol`. `LOG_PATHS` under `/home` cannot be read; files outside `adm`/world-readable need their group or ACL granted to `heimdall-otel`.
+
+Agent log tailing (`HEIMDALL_LOG_PATHS`) refuses a path whose last component is a symlink (a writable log dir could otherwise point the agent at `/etc/shadow`). Kubelet links under `/var/log/containers` and `/var/log/pods` are always followed; set `HEIMDALL_LOG_FOLLOW_SYMLINKS=1` to follow others.
+
 ## Prerequisites
 
 - Postgres 16+ (Compose includes one; Helm can embed or use an external URL)
@@ -101,7 +107,9 @@ Units: agent + [`deploy/systemd/heimdall-otelcol.service`](../deploy/systemd/hei
 
 | Variable | Where | Notes |
 | --- | --- | --- |
-| `HEIMDALL_SESSION_SECRET` | Hub | ≥32 chars; iron-session cookie key. **Required in production** (hub fails closed without it) |
+| `HEIMDALL_SESSION_SECRET` | Hub | ≥32 chars; iron-session cookie key. **Required, no shipped default**: Compose refuses to start without it (`openssl rand -hex 32` into `.env`); Helm generates one into `<release>-secrets` (or `hub.sessionSecret.existingSecret`). The hub refuses the old documented placeholder in production. Rotating it signs everyone out. |
+| `POSTGRES_PASSWORD` | Compose | **Required, no default.** Builds `DATABASE_URL`. Existing Compose volumes were initialised with `heimdall`: keep that or rotate first ([runbooks/postgres-password.md](runbooks/postgres-password.md)). Helm: `postgres.auth.password` / `postgres.auth.existingSecret`, else generated (existing installs keep `heimdall`). |
+| `HEIMDALL_ALLOW_INSECURE` | Agent, host installers | `1` accepts a plain-http hub URL on a routable host. Without it the agent and installers require https, except loopback and single-label / `*.svc` in-cluster names. |
 | `HEIMDALL_SECRET_KEY` | Hub | 32-byte AES-256-GCM key (hex or base64) that encrypts TOTP secrets, OIDC client secrets and alert/SCM credentials at rest. **Required with Postgres or `NODE_ENV=production`** (hub refuses to start without it); PGlite dev mode auto-creates `$HEIMDALL_DATA_DIR/secret.key` (0600). Generate: `openssl rand -hex 32`. **Back it up**: losing it means every stored secret must be re-entered (admins can still sign in; MFA falls back to recovery codes). Helm generates and keeps one for you (see below). |
 | `HEIMDALL_COOKIE_SECURE` | Hub | Optional `true`/`false` override; otherwise derived from `HEIMDALL_PUBLIC_URL` (`http://` → non-Secure so Compose wizard sessions work) |
 | `HEIMDALL_ALERTS_PAUSED` | Hub | `true`/`1` kills all outbound SMTP/Slack/Discord/SMS (lab emergency stop); also `POST /api/v1/alerts/pause` |
@@ -132,17 +140,20 @@ Setting `HEIMDALL_MAX_BODY_INGEST` replaces the default for **all** ingest route
 CSRF: session-cookie `POST/PUT/PATCH/DELETE` routes reject cross-origin browser requests (`Origin` / `Sec-Fetch-Site`) with `403`. Expected origin is `HEIMDALL_PUBLIC_URL` (else the request `Host`), so set it correctly behind a proxy. Exempt (token-auth, no cookies): `agents/{register,heartbeat,metrics,logs,vulns}`, both integration webhooks, OTLP `/v1/metrics` and `/v1/logs`.
 
 
-Never commit production secrets. Default Compose values are for local smoke only.
+Never commit production secrets. Compose and Helm ship no default secrets.
 
 ## Docker Compose
 
 ```bash
 cd deploy/docker
+# .env: HEIMDALL_BOOTSTRAP_TOKEN, HEIMDALL_SECRET_KEY, HEIMDALL_SESSION_SECRET (openssl rand -hex 32 each)
+#       POSTGRES_PASSWORD (new volume: openssl rand -hex 24; existing volume: heimdall)
 docker compose up --build
 ```
 
 - Hub: http://127.0.0.1:43123  
-- Postgres: host port `54329`  
+- Postgres: `127.0.0.1:54329` only (not reachable from the LAN)  
+- Agents run with `no-new-privileges` and no Linux capabilities (`agent-posture` keeps only `DAC_READ_SEARCH` so Trivy can read the host root). They stay uid 0 by default because existing `agent_state` volumes are root-owned; `HEIMDALL_AGENT_USER=65532:65532` + `DOCKER_GID` runs them non-root (see the comment in `compose.yaml`).  
 - One sample agent registers as `compose-agent-01`
 
 Complete the first-run wizard (admin → channels → remotes → MFA → agent token). Optional: mount Docker socket on the agent for container metrics.
@@ -151,12 +162,10 @@ Complete the first-run wizard (admin → channels → remotes → MFA → agent 
 
 ```bash
 helm template heimdall deploy/helm/heimdall \
-  --set hub.env.HEIMDALL_SESSION_SECRET=change-me-to-32chars-minimum!! \
   --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN="$(openssl rand -hex 32)" \
   --set hub.env.HEIMDALL_PUBLIC_URL=https://heimdall.example.com
 
 helm upgrade --install heimdall deploy/helm/heimdall -n heimdall --create-namespace \
-  --set hub.env.HEIMDALL_SESSION_SECRET=… \
   --set hub.env.HEIMDALL_BOOTSTRAP_TOKEN=… \
   --set hub.env.HEIMDALL_PUBLIC_URL=https://heimdall.example.com \
   --set agent.clusterId=prod-a
@@ -164,12 +173,18 @@ helm upgrade --install heimdall deploy/helm/heimdall -n heimdall --create-namesp
 
 Set a distinct `agent.clusterId` per cluster Deployment. Activate the cluster in **Dashboard → Clusters** after agents report in.
 
-### Day-2 deploy on a single-node k3s server
+**Chart-managed secrets.** With no values set, the chart creates `<release>-secrets` once (`helm.sh/resource-policy: keep`, reused on every upgrade via `lookup`) holding `session-secret` (64 random chars) and `postgres-password`. Bring your own with `hub.sessionSecret.existingSecret` / `postgres.auth.existingSecret` (key `postgres.auth.secretKey`, default `password`), or set the plain values (they end up in the Helm release). An install that already has the `heimdall-postgres` Deployment or PVC keeps the legacy password `heimdall`, because that is what its data volume was initialised with; rotate it with [runbooks/postgres-password.md](runbooks/postgres-password.md). `helm template` (GitOps renderers without cluster access) cannot look anything up and renders new random values on every run: use the `existingSecret` options there.
+
+**Pod security.** Hub (uid 1001), agent (65532) and OTel collector (10001) run with `runAsNonRoot`, `allowPrivilegeEscalation: false`, all capabilities dropped, `seccompProfile: RuntimeDefault` and a read-only root filesystem (hub: `emptyDir` at `/tmp` and `/app/.next/cache`). Override per component with `hub.containerSecurityContext`, `agent.containerSecurityContext`, `otel.collector.containerSecurityContext` (e.g. `readOnlyRootFilesystem: false`). Beyla (`otel.beyla.enabled`, off by default) stays `privileged` + `hostPID`: eBPF probes need it.
+
+**OTLP receivers.** With `otel.collector.traces` (daemonset) the chart adds a NetworkPolicy (`otel.collector.networkPolicy.enabled`, default on) so only pods inside the cluster reach 4317/4318; the receivers have no auth. Narrow it with `networkPolicy.namespaces`, or admit hostNetwork senders with `networkPolicy.extraFrom` (e.g. `[{ipBlock: {cidr: <node CIDR>}}]`). It needs a CNI that enforces NetworkPolicy (k3s does).
+
+### Day-2 deploy on the cluster node (homelab / k3s)
 
 After the first migrate (`scripts/migrate-compose-to-k8s.sh`), use **`scripts/deploy-cluster.sh`** on the server to pull `main`, rebuild hub/agent into the local image store, helm upgrade (with host mounts), and rollout:
 
 ```bash
-# from your clone of the repository
+cd /path/to/heimdall
 ./scripts/deploy-cluster.sh
 ```
 
@@ -190,8 +205,8 @@ Host mounts overlay: [`deploy/helm/heimdall/values-host-mounts.yaml`](../deploy/
 
 **Notes**
 - If `SKIP_IMAGE_BUILD=1` or `SKIP_IMAGE_IMPORT=1` is set in your shell, image rebuild is skipped — unset them for hub/agent code updates.
-- Builds pass `--build-arg CACHEBUST=$(git rev-parse HEAD)` and tag images as `heimdall-hub:<gitsha>` / `heimdall-agent:<gitsha>` (not only `:latest`) so k3s `IfNotPresent` cannot keep a stale hub.
-- If `deploy-cluster.sh` itself changes during `git pull`, the script re-execs so you are not running stale bash functions against new Dockerfiles. If a deploy log looks stale, run the script once more.
+- Builds pass `--build-arg CACHEBUST=$(git rev-parse HEAD)` and tag images as `heimdall-hub:<gitsha>` / `heimdall-agent:<gitsha>` (not only `:latest`) so k3s `IfNotPresent` cannot keep a stale hub. The script refuses to import a hub image that still contains the old MFA blurb.
+- If `deploy-cluster.sh` itself changes during `git pull`, the script re-execs so you are not running stale bash functions against new Dockerfiles. **If a deploy log skips “Verify MFA copy” / still imports `heimdall-hub:latest` only, re-run the script once** — the first run after pulling deploy fixes was still the old in-memory script.
 - Tagging uses `docker image inspect heimdall-hub:latest` (not `compose images -q | head -1`, which can repoint `:latest` at an older image and keep the same k3s import digest).
 - Full wipe of layer cache: `FORCE_NO_CACHE=1 ./scripts/deploy-cluster.sh`.
 - The agent image is **distroless** (no `printenv` / shell). Confirm mounts with:
@@ -199,16 +214,16 @@ Host mounts overlay: [`deploy/helm/heimdall/values-host-mounts.yaml`](../deploy/
 
 ### In-cluster agent host disk mounts
 
-By default (`agent.hostMounts.enabled: true`) the agent Deployment bind-mounts the **host** root at `/host` (readOnly) and sets `HEIMDALL_WATCH_MOUNTS=/host,/host/var` so disk samples reflect host filesystems, not the container overlay. `/boot` is intentionally omitted. Nested mounts (e.g. a separate host `/var`) show under `/host/…` via `mountPropagation: HostToContainer`.
+Off by default (it is a hostPath of `/`). With `agent.hostMounts.enabled: true` (set by `values-host-mounts.yaml`, which `deploy-cluster.sh` passes) the agent Deployment bind-mounts the **host** root at `/host` (readOnly) and sets `HEIMDALL_WATCH_MOUNTS=/host,/host/var` so disk samples reflect host filesystems, not the container overlay. `/boot` is intentionally omitted. Nested mounts (e.g. a separate host `/var`) show under `/host/…` via `mountPropagation: HostToContainer`.
 
-Disable on clusters that disallow hostPath:
+Turn it off again (clusters that disallow hostPath):
 
 ```bash
 helm upgrade --reuse-values heimdall deploy/helm/heimdall -n heimdall \
   --set agent.hostMounts.enabled=false
 ```
 
-Pick up the default host mounts on an existing release (no full re-migrate).
+Pick up the default host mounts on an existing homelab release (no full re-migrate).
 `watchMounts` is a **YAML list** (joined to `HEIMDALL_WATCH_MOUNTS`). Do **not** pass
 `/host,/host/var` to `--set` / `--set-string` — Helm still splits on commas
 (`key "/host/var" has no value`).
@@ -229,7 +244,7 @@ helm upgrade --reuse-values heimdall deploy/helm/heimdall -n heimdall \
   --set 'agent.hostMounts.watchMounts[1]=/host/var'
 ```
 
-Chart defaults alone are enough if you only need the stock `/host` + `/host/var` list:
+The chart's `watchMounts` default is enough if you only need the stock `/host` + `/host/var` list:
 
 ```bash
 helm upgrade --reuse-values heimdall deploy/helm/heimdall -n heimdall \
@@ -272,7 +287,7 @@ Wizard collects the first GitHub org + GitLab project. Add more anytime under **
 
 ```bash
 ./scripts/handshake-smoke.sh
-curl -s http://127.0.0.1:43123/api/v1/health   # {"status":"ok","service":"heimdall-hub",…}
+curl -s http://127.0.0.1:43123/api/v1/health   # {"ok":true,"phase":8,…}
 ```
 
 ## Agent authentication
@@ -285,7 +300,7 @@ Upgrade hub and agent together. Wizard install snippets already set `HEIMDALL_BO
 
 `GET /api/v1/agents` requires a logged-in session (`agents:read`) and returns only the caller’s org.
 
-See [`security-review.md`](security-review.md) for the threat model and dispositions.
+See [`security-review.md`](security-review.md) for the Phase 22 threat model and dispositions.
 
 ## Operations checklist
 
@@ -323,6 +338,6 @@ To reach something on your LAN (self-hosted GitLab, Keycloak, a local Slack-comp
 
 | Variable | Example | Notes |
 |----------|---------|-------|
-| `HEIMDALL_ALLOW_PRIVATE_HOSTS` | `gitlab.lan,10.0.5.0/24,192.168.1.20` | Comma-separated hostnames, IPs and CIDRs. Leave unset unless you need it; allow the narrowest entry that works. |
+| `HEIMDALL_ALLOW_PRIVATE_HOSTS` | `gitlab.lan,203.0.113.20/24,203.0.113.10` | Comma-separated hostnames, IPs and CIDRs. Leave unset unless you need it; allow the narrowest entry that works. |
 
 Helm: `--set-string hub.extraEnv.HEIMDALL_ALLOW_PRIVATE_HOSTS=gitlab.lan` (`hub.extraEnv` passes any extra hub variable through, including `HEIMDALL_TRUST_PROXY`, `HEIMDALL_RATE_*` and `HEIMDALL_LEGACY_TOKENS`). Compose: add it under the hub `environment`.

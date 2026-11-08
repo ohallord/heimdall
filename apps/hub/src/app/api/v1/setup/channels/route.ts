@@ -1,5 +1,8 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
+import { smtpProbeUrl } from "@/lib/alerts/channels";
+import { setupClosed } from "@/lib/auth/setup-guard";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { rejectBlockedUrls } from "@/lib/http-guard/validate-url";
@@ -37,6 +40,8 @@ const schema = z.object({
 });
 
 async function postHandler(request: Request) {
+  const closed = await setupClosed();
+  if (closed) return closed;
   try {
     const session = await requireSession({
       permission: "setup:run",
@@ -51,6 +56,7 @@ async function postHandler(request: Request) {
       body.data.slackWebhookUrl,
       body.data.discordWebhookUrl,
       body.data.sms?.apiBaseUrl,
+      body.data.smtp ? smtpProbeUrl(body.data.smtp.host, body.data.smtp.port) : null,
     ]);
     if (blocked) return blocked;
 
@@ -103,11 +109,7 @@ async function postHandler(request: Request) {
 
     return NextResponse.json({ nextStep: "agent_token" });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

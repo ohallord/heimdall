@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests install-otelcol.sh / install-otelcol-docker.sh without root or network.
+# Phase 28: install-otelcol.sh / install-otelcol-docker.sh without root or network.
 # Fake release tarballs + checksums are served via file://; systemctl/docker/uname are stubbed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -25,13 +25,19 @@ for a in amd64 arm64; do
     >>"$T/bad/v$V/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
 done
 
-for cmd in systemctl docker; do
+for cmd in systemctl docker useradd groupadd usermod; do
   cat >"$T/bin/$cmd" <<EOF
 #!/usr/bin/env bash
 echo "\$*" >>"$T/$cmd.log"
 exit 0
 EOF
 done
+cat >"$T/bin/getent" <<'EOF'
+#!/usr/bin/env bash
+# no heimdall-otel user/group yet; group adm exists
+[[ "$1 $2" == "group adm" ]] && { echo "adm:x:4:"; exit 0; }
+exit 2
+EOF
 cat >"$T/bin/uname" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == -m ]]; then echo "${STUB_ARCH:-x86_64}"; else exec /usr/bin/uname "$@"; fi
@@ -64,6 +70,22 @@ grep -qx "HEIMDALL_AGENT_ID=agt_1" "$E" || fail "agent id missing from otel.env"
 grep -q "$TOKEN" "$C" && fail "token leaked into config"
 grep -q "$TOKEN" "$T/out" && fail "token printed to stdout"
 grep -q 'ExecStart=/usr/local/bin/otelcol-contrib' "$U" || fail "unit not installed"
+# Hardened unit: dedicated user (created by the installer), no capabilities, read-only system.
+for want in 'User=heimdall-otel' 'SupplementaryGroups=systemd-journal' 'CapabilityBoundingSet=' \
+  'ProtectSystem=strict' 'ProtectHome=true' 'RestrictSUIDSGID=true' 'ProtectKernelTunables=true' \
+  'ProtectKernelModules=true' 'NoNewPrivileges=true' 'StateDirectory=heimdall-otelcol'; do
+  grep -qx -- "$want" "$U" || fail "unit missing $want"
+done
+grep -q -- '--system .*heimdall-otel$' "$T/useradd.log" || fail "heimdall-otel system user not created"
+grep -q 'nologin' "$T/useradd.log" || fail "heimdall-otel has a login shell"
+grep -qx -- '-aG adm heimdall-otel' "$T/usermod.log" || fail "heimdall-otel not added to adm (log files)"
+if command -v systemd-analyze >/dev/null 2>&1; then
+  # Missing binary / user in the sandbox is expected; unknown directives are not.
+  systemd-analyze verify "$U" >"$T/verify" 2>&1 || true
+  if grep -qiE 'Unknown (key|section|lvalue)' "$T/verify"; then
+    cat "$T/verify" >&2; fail "systemd-analyze rejects a unit directive"
+  fi
+fi
 grep -qx 'daemon-reload' "$T/systemctl.log" || fail "no daemon-reload"
 grep -qx 'enable heimdall-otelcol.service' "$T/systemctl.log" || fail "unit not enabled"
 grep -qx 'restart heimdall-otelcol.service' "$T/systemctl.log" || fail "unit not (re)started"
@@ -99,7 +121,7 @@ install_otelcol "$T/offline" OTELCOL_BIN="$T/local-otelcol" OTELCOL_DOWNLOAD_BAS
   ./scripts/install-otelcol.sh >"$T/out" 2>&1 || { cat "$T/out" >&2; fail "OTELCOL_BIN install exited non-zero"; }
 "$T/offline/usr/local/bin/otelcol-contrib" | grep -q local-otelcol || fail "OTELCOL_BIN not used"
 
-# --- traces: local OTLP receiver feeding a traces pipeline ---
+# --- traces: local OTLP receiver feeding a traces pipeline (Phase 29) ---
 grep -q "endpoint: 127.0.0.1:4318" "$C" || fail "baremetal otlp http receiver not on loopback"
 grep -q "^    traces:" "$C" || fail "baremetal config has no traces pipeline"
 

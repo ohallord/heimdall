@@ -5,10 +5,13 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: heimdall
-      POSTGRES_PASSWORD: heimdall
+      # REQUIRED, no default. Existing volumes were initialised with "heimdall" — set POSTGRES_PASSWORD=heimdall
+      # in .env for those (changing it here does not change an initialised DB; see docs/runbooks/postgres-password.md).
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (new install: openssl rand -hex 24; existing volume: heimdall)}"
       POSTGRES_DB: heimdall
     ports:
-      - "54329:5432"
+      # Loopback only: host tools / a dev hub reach it on 127.0.0.1:54329; the LAN cannot.
+      - "127.0.0.1:54329:5432"
     volumes:
       - heimdall_pg:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +26,7 @@ services:
     build:
       context: ../../apps/hub
       dockerfile: Dockerfile
-      # The hub image builds and serves agent binaries + host installers.
+      # Phase 31: the hub image builds and serves agent binaries + host installers.
       additional_contexts:
         agent: ../../apps/agent
         scripts: ../../scripts
@@ -34,7 +37,8 @@ services:
         AGENT_VERSION: ${AGENT_VERSION:-dev}
     environment:
       HEIMDALL_BOOTSTRAP_TOKEN: "${HEIMDALL_BOOTSTRAP_TOKEN:?set HEIMDALL_BOOTSTRAP_TOKEN in .env (openssl rand -hex 32)}"
-      HEIMDALL_SESSION_SECRET: heimdall-dev-session-secret-change-me!!
+      # REQUIRED, no default: signs session cookies. Rotating it logs everyone out.
+      HEIMDALL_SESSION_SECRET: "${HEIMDALL_SESSION_SECRET:?set HEIMDALL_SESSION_SECRET in .env (openssl rand -hex 32)}"
       # REQUIRED: encrypts TOTP/OIDC/alert/SCM secrets at rest. BACK IT UP (losing it = re-entering every secret).
       HEIMDALL_SECRET_KEY: "${HEIMDALL_SECRET_KEY:?set HEIMDALL_SECRET_KEY in .env (openssl rand -hex 32)}"
       HEIMDALL_PUBLIC_URL: http://127.0.0.1:43123
@@ -44,7 +48,8 @@ services:
       HEIMDALL_ALERTS_PAUSED: "${HEIMDALL_ALERTS_PAUSED:-false}"
       HEIMDALL_RP_ID: localhost
       HEIMDALL_ORIGIN: http://127.0.0.1:43123
-      DATABASE_URL: postgres://heimdall:heimdall@postgres:5432/heimdall?sslmode=disable
+      # Password must be URL-safe (openssl rand -hex output is).
+      DATABASE_URL: "postgres://heimdall:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/heimdall?sslmode=disable"
       PORT: "43123"
       HOSTNAME: "0.0.0.0"
     ports:
@@ -80,12 +85,19 @@ services:
     # Lab default runs as root so container scrape works. For nonroot instead:
     #   export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
     #   HEIMDALL_AGENT_USER=65532:65532 docker compose up
-    # (and keep group_add below).
+    # (and keep group_add below). Fresh agent_state volumes are owned by 65532 (image); a volume
+    # first used as root needs: docker run --rm -v heimdall_agent_state:/s alpine chown -R 65532:65532 /s
+    # Root stays the default so existing root-owned state volumes keep working. It still holds no
+    # capabilities: docker.sock (root-owned 660) and the state volume are reachable via owner bits.
     user: "${HEIMDALL_AGENT_USER:-0:0}"
     group_add:
       - "${DOCKER_GID:-999}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
-      # Host engine API for container metrics (host/register work without this).
+      # Host engine API for Phase 3 container metrics (host/register work without this).
       - /var/run/docker.sock:/var/run/docker.sock
       - agent_state:/var/lib/heimdall
     depends_on:
@@ -116,9 +128,17 @@ services:
       HEIMDALL_TRIVY_BIN: /usr/local/bin/trivy
       DOCKER_HOST_SOCKET: /var/run/docker.sock
     command: ["run", "--interval", "10s", "--enable-k8s", "false"]
+    # Root + DAC_READ_SEARCH only: Trivy must read every file under the read-only /host mount
+    # (package DBs, configs owned by other users). No other capabilities; no setuid escalation.
     user: "${HEIMDALL_AGENT_USER:-0:0}"
     group_add:
       - "${DOCKER_GID:-999}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_READ_SEARCH
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /:/host:ro

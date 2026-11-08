@@ -7,7 +7,7 @@ export type VulnSeverity =
   | "low"
   | "unknown";
 
-/** Normalized finding used by all scanner parsers before persistence. */
+/** Normalized finding used by all Phase 6 parsers before persistence. */
 export type NormalizedFinding = {
   source: VulnSource;
   externalId: string;

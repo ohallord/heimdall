@@ -227,7 +227,7 @@ function iso(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
 }
 
-/** All spans of one trace, in start order (waterfall). */
+/** All spans of one trace, in start order (Phase 30 waterfall). */
 export async function getTrace(orgId: string, traceId: string): Promise<SpanRow[]> {
   const db = await getDb();
   const res = await db.query<Record<string, unknown>>(
@@ -358,7 +358,7 @@ export async function purgeOtelSpans(orgId: string, now = Date.now()): Promise<n
 }
 
 // ---------------------------------------------------------------------------
-// APM UI helpers
+// Phase 30: APM UI helpers
 // ---------------------------------------------------------------------------
 
 /**

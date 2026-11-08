@@ -243,14 +243,14 @@ export async function searchLogEvents(input: {
   }
   if (input.q?.trim()) {
     clauses.push(`line ILIKE $${idx++}`);
-    params.push(`%${input.q.trim()}%`);
+    params.push(`%${escapeLike(input.q.trim())}%`);
   }
   if (input.matchesOnly) {
     clauses.push(`matched_rules_json != '[]'`);
   }
   if (input.ruleId?.trim()) {
     clauses.push(`matched_rules_json LIKE $${idx++}`);
-    params.push(`%"ruleId":"${input.ruleId.trim()}"%`);
+    params.push(`%"ruleId":${escapeLike(JSON.stringify(input.ruleId.trim()))}%`);
   }
 
   params.push(limit);
@@ -275,4 +275,9 @@ function parseMatches(raw: string): LogMatch[] {
   } catch {
     return [];
   }
+}
+
+/** Escape LIKE/ILIKE wildcards (Postgres default escape is backslash) so search text matches literally. */
+export function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => "\\" + c);
 }

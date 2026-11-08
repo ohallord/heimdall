@@ -59,9 +59,6 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("[heimdall] otlp logs failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }

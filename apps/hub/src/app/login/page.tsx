@@ -81,11 +81,16 @@ function LoginInner() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-6 py-10">
-      <header>
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-signal">
-          Heimdall
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Sign in</h1>
+      <header className="flex items-center gap-3">
+        {/* BrandMark is a client-safe static img; login page is a client component */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/mark-light.svg" alt="" width={40} height={40} />
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-signal">
+            Heimdall
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Sign in</h1>
+        </div>
       </header>
       {error ? (
         <p className="border border-danger/40 bg-white px-3 py-2 text-sm text-danger">
@@ -97,11 +102,12 @@ function LoginInner() {
           <form onSubmit={onLogin} className="space-y-4 border border-border bg-surface p-5">
             <label className="block text-sm">
               <span className="mb-1 block font-mono text-xs uppercase text-muted">
-                Email
+                Email or username
               </span>
               <input
                 className="w-full border border-border px-3 py-2"
-                type="email"
+                type="text"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

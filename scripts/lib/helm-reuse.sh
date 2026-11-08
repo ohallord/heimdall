@@ -3,7 +3,7 @@
 #
 # helm_reuse_args RELEASE NAMESPACE
 #   Sets HELM_REUSE_ARGS to flags that keep the release's values *and* apply new chart defaults.
-#   Plain --reuse-values skips new defaults (e.g. nil .Values.otel). Helm >= 3.14 has
+#   Plain --reuse-values skips new defaults (Phase 27: nil .Values.otel). Helm >= 3.14 has
 #   --reset-then-reuse-values; older Helm gets the prior values through -f (temp file, 0600,
 #   removed on exit).
 # shellcheck disable=SC2034  # HELM_REUSE_ARGS / HELM_PRIOR_VALUES are read by the caller

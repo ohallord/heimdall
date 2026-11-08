@@ -1,5 +1,6 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { deleteAgent } from "@/lib/agents";
 import { requireSession } from "@/lib/auth/session";
 
@@ -21,11 +22,7 @@ async function deleteHandler(_req: Request, ctx: Ctx) {
     }
     return NextResponse.json({ ok: true, id: agentId });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

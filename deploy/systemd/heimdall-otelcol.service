@@ -1,19 +1,48 @@
 [Unit]
 Description=Heimdall OpenTelemetry Collector (bare metal)
-Documentation=https://github.com/ohallord/heimdall
+Documentation=https://github.com/thedanoh/heimdall
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# Root simplifies journald access on bare metal; harden later with
-# SupplementaryGroups=systemd-journal if running as a dedicated user.
+# Dedicated unprivileged user, created by scripts/install-otelcol.sh (also added to group adm, when
+# present, for root:adm /var/log files). systemd-journal lets the journald receiver read the journal.
+User=heimdall-otel
+Group=heimdall-otel
+SupplementaryGroups=systemd-journal
+# Read as root by systemd before dropping privileges; stays 0600 root.
 EnvironmentFile=-/etc/heimdall/otel.env
 ExecStart=/usr/local/bin/otelcol-contrib --config=/etc/heimdall/otel-collector.yaml
 Restart=always
 RestartSec=5
+
+# Hardening. The collector only reads (config, /proc, /sys, journal, log files), listens on
+# 127.0.0.1:4317/4318 and sends to the hub. Its one writable path is its own state dir
+# (/var/lib/heimdall-otelcol, for a file_storage extension if you add one).
+StateDirectory=heimdall-otelcol
+StateDirectoryMode=0700
 NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

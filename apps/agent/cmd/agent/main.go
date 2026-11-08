@@ -26,7 +26,7 @@ var k8sUnavailableOnce sync.Once
 var containerWarn containers.SkipWarner
 
 // version is overridden at build time: -ldflags "-X main.version=<ver>" (scripts/build-dist.sh).
-var version = "dev"
+var version = "0.7.0-phase7"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -86,7 +86,15 @@ func loadConfig(args []string) config.Config {
 		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
 		os.Exit(1)
 	}
+	logConfigWarnings(cfg)
 	return cfg
+}
+
+// logConfigWarnings prints non-fatal config notes (e.g. a plain-http hub URL).
+func logConfigWarnings(cfg config.Config) {
+	for _, w := range cfg.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
 }
 
 // newClient builds a hub client backed by the persistent per-agent secret store.
@@ -359,6 +367,7 @@ func runScanImage(args []string) {
 		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
 		os.Exit(1)
 	}
+	logConfigWarnings(cfg)
 	if *image == "" {
 		fmt.Fprintln(os.Stderr, "--image is required")
 		os.Exit(2)
@@ -405,6 +414,7 @@ func runScanHost(args []string) {
 		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
 		os.Exit(1)
 	}
+	logConfigWarnings(cfg)
 
 	scanRoot := strings.TrimSpace(*root)
 	if scanRoot == "" {

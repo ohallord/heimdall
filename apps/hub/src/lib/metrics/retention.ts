@@ -20,9 +20,9 @@ export {
 
 export type OrgSettingsJson = {
   metricsRetentionDays?: number;
-  /** Retention for log_events and closed alert_events. */
+  /** Retention for log_events and closed alert_events (Phase 25). */
   logsRetentionDays?: number;
-  /** Retention for otel_spans, 1–60 days, default 7. */
+  /** Retention for otel_spans (Phase 29), 1–60 days, default 7. */
   tracesRetentionDays?: number;
   /** When true (default), new critical findings open Alarms. */
   criticalFindingsToAlarms?: boolean;

@@ -152,6 +152,48 @@ spec:
     - name: otlp-http
       port: 4318
       targetPort: otlp-http
+{{- $np := dig "networkPolicy" (dict) $c }}
+{{- if (dig "enabled" true $np) }}
+---
+# The OTLP receivers are unauthenticated. Only pods inside the cluster (default: every namespace,
+# so apps and Beyla keep exporting) may reach 4317/4318; off-cluster sources hitting a pod IP are
+# dropped. Narrow with otel.collector.networkPolicy.namespaces; add node/host-network senders
+# (hostNetwork apps) with extraFrom (e.g. an ipBlock of the node CIDR). Needs a CNI that enforces
+# NetworkPolicy (k3s: built in); otherwise it is inert.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "heimdall.name" . }}-otelcol
+  labels:
+    {{- include "heimdall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otelcol
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "heimdall.name" . }}
+      app.kubernetes.io/component: otelcol
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
+          protocol: TCP
+      from:
+        {{- $ns := dig "namespaces" (list) $np }}
+        {{- if $ns }}
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: {{ toJson $ns }}
+        {{- else }}
+        - namespaceSelector: {}
+        {{- end }}
+        {{- with (dig "extraFrom" (list) $np) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

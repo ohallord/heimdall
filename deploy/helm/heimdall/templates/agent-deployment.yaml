@@ -31,6 +31,9 @@ spec:
           image: {{ .Values.image.agent }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["run", "--interval", "15s"]
+          # distroless nonroot (65532). Reads /host read-only and the k8s API; writes only the state volume.
+          securityContext:
+            {{- include "heimdall.containerSecurityContext" (dict "uid" 65532 "readOnly" true "override" (dig "containerSecurityContext" (dict) .Values.agent)) | nindent 12 }}
           env:
             - name: HEIMDALL_HUB_URL
               value: http://{{ include "heimdall.name" . }}-hub:{{ .Values.hub.service.port }}
@@ -50,6 +53,8 @@ spec:
             - name: HEIMDALL_STATE_DIR
               value: {{ include "heimdall.agentState.dir" . | quote }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: agent-state
               mountPath: {{ include "heimdall.agentState.dir" . | quote }}
           {{- if .Values.agent.hostMounts.enabled }}
@@ -72,6 +77,8 @@ spec:
             path: /
             type: Directory
         {{- end }}
+        - name: tmp
+          emptyDir: {}
         - name: agent-state
           {{- if (eq (include "heimdall.agentState.persistent" .) "true") }}
           persistentVolumeClaim:

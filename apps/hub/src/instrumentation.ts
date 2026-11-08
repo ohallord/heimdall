@@ -1,8 +1,8 @@
-/** Server start hooks: retention purge and the insecure bootstrap token warning. */
+/** Server start hooks: retention purge (Phase 25) and the insecure bootstrap token warning (Phase 32). */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  // Shout once if the hub accepts the dev default (or a short) bootstrap token.
+  // Phase 32: shout once if the hub accepts the dev default (or a short) bootstrap token.
   setTimeout(() => {
     import("@/lib/agents/bootstrap")
       .then(({ bootstrapStatus }) => bootstrapStatus())

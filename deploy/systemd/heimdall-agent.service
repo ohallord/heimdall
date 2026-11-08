@@ -1,6 +1,6 @@
 [Unit]
 Description=Heimdall agent
-Documentation=https://github.com/ohallord/heimdall
+Documentation=https://github.com/thedanoh/heimdall
 After=network-online.target
 Wants=network-online.target
 

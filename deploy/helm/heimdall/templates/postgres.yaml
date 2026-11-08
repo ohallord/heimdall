@@ -62,7 +62,9 @@ spec:
             - name: POSTGRES_USER
               value: {{ .Values.postgres.auth.username | quote }}
             - name: POSTGRES_PASSWORD
-              value: {{ .Values.postgres.auth.password | quote }}
+              valueFrom:
+                secretKeyRef:
+                  {{- include "heimdall.postgresPasswordRef" . | nindent 18 }}
             - name: POSTGRES_DB
               value: {{ .Values.postgres.auth.database | quote }}
             - name: PGDATA

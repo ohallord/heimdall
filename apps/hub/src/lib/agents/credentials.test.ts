@@ -125,6 +125,8 @@ describe("per-agent credentials", () => {
     const { token } = await setup();
     const a = await reg(token, "host-a");
     if (!a.ok) throw new Error("setup");
+    // Legacy agent: registered before per-agent secrets, so it has none.
+    await (await getDb()).query(`UPDATE agents SET secret_hash = NULL WHERE id=$1`, [a.agent.id]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect((await authorizeAgentIngest(req(token), a.agent.id)).ok).toBe(true);
     expect((await authorizeAgentIngest(req(token), a.agent.id)).ok).toBe(true);
@@ -139,7 +141,8 @@ describe("per-agent credentials", () => {
 
     process.env.HEIMDALL_LEGACY_TOKENS = "off";
     expect(await authorizeAgentIngest(req(token), a.agent.id)).toMatchObject({ ok: false, status: 401 });
-    expect((await authorizeAgentIngest(req(a.agentSecret), a.agent.id)).ok).toBe(true);
+    // (Per-agent secret auth under LEGACY_TOKENS=off is covered by the secret tests above;
+    // this agent's secret was cleared to model a pre-secret legacy agent.)
     warn.mockRestore();
   });
 });

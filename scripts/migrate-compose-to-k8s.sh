@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Heimdall: migrate Docker Compose stack → Kubernetes (Helm)
 #
-# Built for single-node k3s hosts that already run the Compose stack.
+# Still messy / complete-ish — homelab cutover learnings baked in; polish later.
 #
 # From repo root (see docs/migrate-compose-to-k8s.md):
 #   ./scripts/migrate-compose-to-k8s.sh preflight
@@ -14,13 +14,15 @@
 #   HELM_CHART             default: $HEIMDALL_ROOT/deploy/helm/heimdall
 #   K8S_NAMESPACE          default: heimdall
 #   RELEASE_NAME           default: heimdall
-#   CLUSTER_ID             default: default
-#   BACKUP_DIR             default: /var/tmp/heimdall-migrate-$(date +%Y%m%d)
+#   CLUSTER_ID             default: homelab
+#   BACKUP_DIR             default: a fresh private dir (umask 077, mktemp -d) under
+#                          ${TMPDIR:-/var/tmp}; printed by export. Reuse it for restore.
 #   PUBLIC_URL             browser URL you will open — NOT cluster DNS.
-#                          Example (LAN): http://192.0.2.10:43123
+#                          Example (homelab LAN): http://203.0.113.10:43123
 #                          Must match exposure (hostPort / NodePort / Ingress), not
 #                          http://heimdall-hub:43123 (that is Service DNS only).
-#   SESSION_SECRET         default: read from compose .env or prompt
+#   SESSION_SECRET         optional; empty = chart-generated Secret (never the old dev default)
+#   POSTGRES_PASSWORD      optional; empty = chart-generated (cluster Postgres starts fresh)
 #   BOOTSTRAP_TOKEN        REQUIRED for helm install (no default; openssl rand -hex 32)
 #   PG_USER / PG_DB        default: heimdall / heimdall
 #   HUB_NODEPORT           default: 43123 — keep in sync with PUBLIC_URL port when
@@ -41,8 +43,8 @@ COMPOSE_DIR="${COMPOSE_DIR:-${HEIMDALL_ROOT}/deploy/docker}"
 HELM_CHART="${HELM_CHART:-${HEIMDALL_ROOT}/deploy/helm/heimdall}"
 K8S_NAMESPACE="${K8S_NAMESPACE:-heimdall}"
 RELEASE_NAME="${RELEASE_NAME:-heimdall}"
-CLUSTER_ID="${CLUSTER_ID:-default}"
-BACKUP_DIR="${BACKUP_DIR:-/var/tmp/heimdall-migrate-$(date +%Y%m%d-%H%M%S)}"
+CLUSTER_ID="${CLUSTER_ID:-homelab}"
+BACKUP_DIR="${BACKUP_DIR:-}"
 BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN:-}"
 PG_USER="${PG_USER:-heimdall}"
 PG_DB="${PG_DB:-heimdall}"
@@ -66,8 +68,27 @@ warn() { printf 'WARN: %s\n' "$*" >&2; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing command: $1"; }
 
+# compose.yaml requires runtime secrets (`${VAR:?}`). export/exec/cp never use them, so a var that
+# is neither in the environment nor in the Compose .env gets a placeholder just to interpolate.
 compose() {
-  (cd "${COMPOSE_DIR}" && docker compose "$@")
+  local -a extra=(PATH="${PATH}")
+  local v
+  for v in HEIMDALL_BOOTSTRAP_TOKEN HEIMDALL_SECRET_KEY HEIMDALL_SESSION_SECRET POSTGRES_PASSWORD; do
+    if [[ -z "${!v:-}" ]] && ! grep -qs "^${v}=." "${COMPOSE_DIR}/.env"; then
+      extra+=("${v}=interpolation-placeholder")
+    fi
+  done
+  (cd "${COMPOSE_DIR}" && env "${extra[@]}" docker compose "$@")
+}
+
+# Private backup dir: the dump holds every secret in the DB. Never a predictable /var/tmp path.
+ensure_backup_dir() {
+  if [[ -z "${BACKUP_DIR}" ]]; then
+    BACKUP_DIR="$(umask 077; mktemp -d "${TMPDIR:-/var/tmp}/heimdall-migrate.XXXXXX")"
+  else
+    (umask 077; mkdir -p "${BACKUP_DIR}")
+    chmod 700 "${BACKUP_DIR}"
+  fi
 }
 
 usage() {
@@ -92,11 +113,11 @@ Commands:
 
 Required for install/all:
   # Browser URL with LAN IP + exposed port (MFA / cookies / ORIGIN). NOT Service DNS.
-  export PUBLIC_URL='http://192.0.2.10:43123'
-  export SESSION_SECRET='at-least-32-chars-secret!!!!!!!!!!!!'
+  export PUBLIC_URL='http://203.0.113.10:43123'
+  export SESSION_SECRET=$(openssl rand -hex 32)   # optional; empty = chart-generated
 
 Optional:
-  export COOKIE_FILE=/tmp/heimdall-cookies.txt  # browser cookies for Admin backup API
+  export COOKIE_FILE=$HOME/.heimdall-cookies.txt  # browser cookies for Admin backup API (chmod 600)
   export BOOTSTRAP_TOKEN=$(openssl rand -hex 32)   # required
   export CLUSTER_ID=homelab
   export IMAGE_HUB=heimdall-hub:latest
@@ -149,24 +170,29 @@ cmd_preflight() {
       "${HELM_CHART}/values.yaml" | head -80 || true
   fi
   warn_port_clash 43123
-  log "Preflight OK — remember PUBLIC_URL is the browser URL (e.g. http://192.0.2.10:43123), not heimdall-hub DNS"
+  log "Preflight OK — remember PUBLIC_URL is the browser URL (e.g. http://203.0.113.10:43123), not heimdall-hub DNS"
 }
 
 cmd_export() {
-  log "Export → ${BACKUP_DIR}"
-  mkdir -p "${BACKUP_DIR}"
+  ensure_backup_dir
+  log "Export → ${BACKUP_DIR} (for restore: export BACKUP_DIR=${BACKUP_DIR})"
   compose ps | tee "${BACKUP_DIR}/compose-ps.txt"
 
   # Capture compose env (redact-ish: still treat as secret)
   if [[ -f "${COMPOSE_DIR}/.env" ]]; then
-    cp "${COMPOSE_DIR}/.env" "${BACKUP_DIR}/compose.env"
+    (umask 077; cp "${COMPOSE_DIR}/.env" "${BACKUP_DIR}/compose.env")
   fi
   compose config > "${BACKUP_DIR}/compose.config.yaml" 2>/dev/null || true
 
   log "pg_dump from Compose postgres"
   compose exec -T postgres \
-    pg_dump -U "${PG_USER}" -d "${PG_DB}" --format=custom --file=/tmp/heimdall.dump
-  compose cp postgres:/tmp/heimdall.dump "${BACKUP_DIR}/heimdall.dump"
+    sh -c 'd=$(mktemp -d) && pg_dump -U "$1" -d "$2" --format=custom --file="$d/heimdall.dump" && echo "$d"' sh "${PG_USER}" "${PG_DB}" \
+    >"${BACKUP_DIR}/.remote-dir"
+  local rdir
+  rdir="$(tr -d '\r\n' <"${BACKUP_DIR}/.remote-dir")"; rm -f "${BACKUP_DIR}/.remote-dir"
+  [[ "${rdir}" == /tmp/* ]] || die "unexpected dump dir in postgres container: ${rdir}"
+  (umask 077; compose cp "postgres:${rdir}/heimdall.dump" "${BACKUP_DIR}/heimdall.dump")
+  compose exec -T postgres rm -rf "${rdir}" || true
   # Also plain SQL for easier debugging
   compose exec -T postgres \
     pg_dump -U "${PG_USER}" -d "${PG_DB}" --format=plain \
@@ -218,7 +244,7 @@ import_image() {
   log "Import ${img} via runtime=${runtime}"
   case "${runtime}" in
     k3s)
-      # Compose builds into Docker; k3s has its own containerd.
+      # homelab path: compose builds into docker; k3s has its own containerd.
       docker save "${img}" | sudo k3s ctr images import -
       ;;
     ctr)
@@ -269,13 +295,16 @@ cmd_images() {
 # Chart wires hub.env.{BOOTSTRAP,SESSION,PUBLIC_URL,RP_ID,ORIGIN} and agent.{hostname,clusterId,enableK8s}.
 # HEIMDALL_COOKIE_SECURE is not a chart value (hub derives Secure from PUBLIC_URL scheme).
 helm_sets() {
-  [[ -n "${PUBLIC_URL}" ]] || die "PUBLIC_URL is required (export PUBLIC_URL=http://192.0.2.10:43123)"
-  [[ -n "${SESSION_SECRET}" ]] || die "SESSION_SECRET is required (≥32 chars)"
+  [[ -n "${PUBLIC_URL}" ]] || die "PUBLIC_URL is required (export PUBLIC_URL=http://203.0.113.10:43123)"
+  case "${SESSION_SECRET}" in
+    heimdall-dev-""session-secret*|CHANGE_ME_""SESSION_SECRET*)
+      die "SESSION_SECRET is a shipped placeholder; unset it (chart generates one) or use: openssl rand -hex 32" ;;
+  esac
   [[ -n "${BOOTSTRAP_TOKEN}" ]] || die "BOOTSTRAP_TOKEN is required (e.g. export BOOTSTRAP_TOKEN=\$(openssl rand -hex 32))"
   case "${PUBLIC_URL}" in
     *heimdall-hub*)
       warn "PUBLIC_URL looks like Service DNS (${PUBLIC_URL})."
-      warn "Use the browser URL (LAN IP / hostname + port), e.g. http://192.0.2.10:43123"
+      warn "Use the browser URL (LAN IP / hostname + port), e.g. http://203.0.113.10:43123"
       ;;
   esac
   local rp_id
@@ -285,7 +314,6 @@ helm_sets() {
     --set "image.hub=${IMAGE_HUB}"
     --set "image.agent=${IMAGE_AGENT}"
     --set "image.pullPolicy=IfNotPresent"
-    --set "hub.env.HEIMDALL_SESSION_SECRET=${SESSION_SECRET}"
     --set "hub.env.HEIMDALL_BOOTSTRAP_TOKEN=${BOOTSTRAP_TOKEN}"
     --set "hub.env.HEIMDALL_PUBLIC_URL=${PUBLIC_URL}"
     --set "hub.env.HEIMDALL_RP_ID=${rp_id}"
@@ -294,6 +322,13 @@ helm_sets() {
     --set-string "agent.enableK8s=true"
     --set "agent.hostname=k8s-${CLUSTER_ID}-01"
   )
+  if [[ -n "${SESSION_SECRET}" ]]; then
+    HELM_SET_ARGS+=(--set-string "hub.env.HEIMDALL_SESSION_SECRET=${SESSION_SECRET}")
+  fi
+  # Restore goes into a fresh cluster Postgres, so the chart-generated password is fine.
+  if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
+    HELM_SET_ARGS+=(--set-string "postgres.auth.password=${POSTGRES_PASSWORD}")
+  fi
   # Chart values.yaml only has hub.service.{type,port} — no nodePort key in template.
   # We set type=NodePort here; specific port patched after install (see cmd_install).
   if [[ -n "${HUB_NODEPORT}" ]]; then
@@ -332,13 +367,16 @@ cmd_install() {
     kubectl -n "${K8S_NAMESPACE}" get pods,svc,pvc 2>/dev/null || true
   fi
 
-  # Dry-run first
+  # Dry-run first (output can hold secrets: private temp file, removed after)
+  local dry
+  dry="$(umask 077; mktemp "${TMPDIR:-/tmp}/heimdall-helm-dry-run.XXXXXX")"
   helm upgrade --install "${RELEASE_NAME}" "${HELM_CHART}" \
     -n "${K8S_NAMESPACE}" \
     --dry-run \
     "${HELM_SET_ARGS[@]}" \
-    | tee "${BACKUP_DIR:-/tmp}/helm-dry-run.txt" >/dev/null \
-    || die "helm dry-run failed — open values.yaml and adjust HELM_SET_ARGS in this script"
+    >"${dry}" \
+    || { rm -f "${dry}"; die "helm dry-run failed — open values.yaml and adjust HELM_SET_ARGS in this script"; }
+  rm -f "${dry}"
 
   # If --wait hangs: another terminal → ./scripts/migrate-compose-to-k8s.sh status
   helm upgrade --install "${RELEASE_NAME}" "${HELM_CHART}" \
@@ -361,7 +399,7 @@ cmd_install() {
       || warn "NodePort patch failed — check if ${HUB_NODEPORT} is in 30000-32767 (K8s default range) or extend service-node-port-range"
     # Note: nodePort 43123 is OUTSIDE the default 30000-32767 range on stock k8s.
     # k3s often allows it; if patch fails, either:
-    #   - use HUB_NODEPORT=30431 and PUBLIC_URL=http://192.0.2.10:30431
+    #   - use HUB_NODEPORT=30431 and PUBLIC_URL=http://203.0.113.10:30431
     #   - or hostPort on the pod / external LB
   fi
 
@@ -376,6 +414,7 @@ EOF
 }
 
 cmd_restore() {
+  [[ -n "${BACKUP_DIR}" ]] || die "set BACKUP_DIR to the directory printed by export"
   local dump="${BACKUP_DIR}/heimdall.dump"
   [[ -f "${dump}" ]] || die "missing ${dump} — run export first (same BACKUP_DIR)"
   log "Restore into cluster Postgres"
@@ -392,12 +431,16 @@ cmd_restore() {
   kubectl -n "${K8S_NAMESPACE}" scale deploy -l 'app.kubernetes.io/component=hub' --replicas=0 2>/dev/null || true
   sleep 3
 
-  kubectl -n "${K8S_NAMESPACE}" cp "${dump}" "${pg_pod}:/tmp/heimdall.dump"
+  local rdir
+  rdir="$(kubectl -n "${K8S_NAMESPACE}" exec "${pg_pod}" -- mktemp -d | tr -d '\r\n')"
+  [[ "${rdir}" == /tmp/* ]] || die "unexpected temp dir in postgres pod: ${rdir}"
+  kubectl -n "${K8S_NAMESPACE}" cp "${dump}" "${pg_pod}:${rdir}/heimdall.dump"
   # Drop/recreate or pg_restore --clean. Prefer restore into empty DB after helm first boot.
   kubectl -n "${K8S_NAMESPACE}" exec -i "${pg_pod}" -- \
-    bash -c "pg_restore -U ${PG_USER} -d ${PG_DB} --clean --if-exists --no-owner /tmp/heimdall.dump" \
+    bash -c "pg_restore -U ${PG_USER} -d ${PG_DB} --clean --if-exists --no-owner ${rdir}/heimdall.dump" \
     || kubectl -n "${K8S_NAMESPACE}" exec -i "${pg_pod}" -- \
-      bash -c "psql -U ${PG_USER} -d ${PG_DB} -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && pg_restore -U ${PG_USER} -d ${PG_DB} --no-owner /tmp/heimdall.dump"
+      bash -c "psql -U ${PG_USER} -d ${PG_DB} -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && pg_restore -U ${PG_USER} -d ${PG_DB} --no-owner ${rdir}/heimdall.dump"
+  kubectl -n "${K8S_NAMESPACE}" exec "${pg_pod}" -- rm -rf "${rdir}" || true
 
   kubectl -n "${K8S_NAMESPACE}" scale deploy -l 'app.kubernetes.io/component=hub' --replicas=1 2>/dev/null || true
   kubectl -n "${K8S_NAMESPACE}" rollout status deploy -l 'app.kubernetes.io/component=hub' --timeout=180s 2>/dev/null || true
@@ -413,7 +456,7 @@ cmd_cutover() {
   cat <<EOF
 
 1) Open PUBLIC_URL (${PUBLIC_URL:-<set PUBLIC_URL>}) in a browser → login (same admin as Compose).
-   Use LAN IP + port, e.g. http://192.0.2.10:43123 — NOT http://heimdall-hub:43123.
+   Use LAN IP + port, e.g. http://203.0.113.10:43123 — NOT http://heimdall-hub:43123.
 2) Dashboard → Clusters → activate cluster id: ${CLUSTER_ID}
 3) Fleet should show the in-cluster agent (k8s enabled) with API up / nodes > 0.
 4) Confirm agents/org data survived (Security remotes, alert channels).
@@ -444,10 +487,10 @@ Compose agent must point at the NEW hub URL (not http://hub:43123 on the old net
 
 In ${COMPOSE_DIR}/compose.yaml under agent.environment:
 
-  HEIMDALL_HUB_URL: ${PUBLIC_URL:-http://<host-ip>:${HUB_NODEPORT:-43123}}
+  HEIMDALL_HUB_URL: ${PUBLIC_URL:-http://203.0.113.10:${HUB_NODEPORT:-43123}}
   HEIMDALL_ENABLE_K8S: "false"
   HEIMDALL_BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN}
-  HEIMDALL_HOSTNAME: $(hostname)-docker
+  HEIMDALL_HOSTNAME: homelab-compose-01
 
 Then:
 
@@ -455,7 +498,8 @@ Then:
   docker compose up -d agent
   # leave hub/postgres stopped if cutover completed
 
-If the agent lands on the wrong org, set HEIMDALL_ORG_ID on the hub to the wizard org id.
+If the agent lands on the wrong org again (Bootstrap vs wizard), re-run the org UPDATE
+from Project notes, or fix wizard adopt-org on a later PR.
 
 EOF
 }
@@ -467,13 +511,12 @@ cmd_status() {
   echo
   kubectl -n "${K8S_NAMESPACE}" get events --sort-by='.lastTimestamp' 2>/dev/null | tail -40 || true
   echo
-  # Common failure modes
+  # Common failure modes from homelab
   kubectl -n "${K8S_NAMESPACE}" get pods -o wide 2>/dev/null | grep -E 'ImagePull|ErrImage|CrashLoop|Pending' \
     && warn "Bad pods above — often: forgot images import, or Compose still bound :43123" || true
 }
 
 cmd_all() {
-  mkdir -p "${BACKUP_DIR}"
   cmd_preflight
   cmd_export
   cmd_images
@@ -488,9 +531,9 @@ main() {
   shift || true
   case "${cmd}" in
     preflight) cmd_preflight ;;
-    export)    mkdir -p "${BACKUP_DIR}"; cmd_export ;;
+    export)    cmd_export ;;
     images)    cmd_images ;;
-    install)   mkdir -p "${BACKUP_DIR}"; cmd_install "$@" ;;
+    install)   cmd_install "$@" ;;
     restore)   cmd_restore ;;
     cutover)   cmd_cutover ;;
     host-agent) cmd_host_agent ;;
@@ -501,4 +544,7 @@ main() {
   esac
 }
 
-main "$@"
+# Sourcing (tests) defines functions only; executing runs the command.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

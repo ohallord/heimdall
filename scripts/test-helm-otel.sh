@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Assert Helm renders the OTel collector (DaemonSet / sidecar) correctly.
+# Phase 27: assert Helm renders the OTel collector (DaemonSet / sidecar) correctly.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 C=deploy/helm/heimdall
@@ -45,7 +45,7 @@ grep -q 'name: otelcol' <<<"$out" || fail "no sidecar container"
 grep -q 'filelog' <<<"$out" && fail "sidecar must not tail logs"
 grep -q "traces:" <<<"$out" && fail "sidecar must not receive traces"
 
-# Beyla eBPF auto-instrumentation (off by default)
+# Phase 33: Beyla eBPF auto-instrumentation (off by default)
 render | grep -qi 'beyla' && fail "beyla rendered by default"
 if render --set otel.beyla.enabled=true >/dev/null 2>&1; then fail "beyla without collector traces should fail"; fi
 out=$(render --set otel.collector.enabled=true --set-string otel.collector.token=hdo_x --set otel.beyla.enabled=true)

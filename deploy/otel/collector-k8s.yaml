@@ -6,10 +6,13 @@
 # or a downward API annotation mapped into the resource processor.
 #
 # Full cluster metrics (kubeletstats, k8s_cluster) can be added later;
-# hostmetrics is the durable baseline.
+# this phase ships hostmetrics as the durable baseline.
 
 receivers:
-  # Apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
+  # Phase 29: apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
+  # Unauthenticated receiver on the pod IP. Restrict who can reach it with a NetworkPolicy (the Helm
+  # chart ships one: otel.collector.networkPolicy, on by default) and never expose it via
+  # NodePort/LoadBalancer/hostPort.
   otlp:
     protocols:
       grpc:

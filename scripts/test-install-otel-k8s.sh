@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests install-otel-k8s.sh with helm/kubectl stubs.
+# Phase 28: install-otel-k8s.sh with helm/kubectl stubs.
 # The token goes to kubectl on stdin only — never into any argv (helm or kubectl).
 set -euo pipefail
 cd "$(dirname "$0")/.."

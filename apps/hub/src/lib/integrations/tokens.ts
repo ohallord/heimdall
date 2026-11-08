@@ -51,6 +51,8 @@ export async function findOrgByIntegrationToken(
   );
   const row = result.rows[0];
   if (!row) return null;
+  const { rememberValidToken } = await import("@/lib/http-guard/ingest");
+  rememberValidToken(token);
   return { orgId: row.org_id, row };
 }
 

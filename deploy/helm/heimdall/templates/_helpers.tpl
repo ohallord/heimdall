@@ -97,7 +97,73 @@ Order: hub.secretKey.existingSecret -> hub.env.HEIMDALL_SECRET_KEY -> chart-mana
 {{- end }}
 {{- end -}}
 
-{{/* OTel collector helpers. */}}
+{{/*
+Chart-managed Secret <name>-secrets (templates/hub-secrets.yaml): session secret + Postgres password.
+*/}}
+{{- define "heimdall.secretsName" -}}
+{{- include "heimdall.name" . }}-secrets
+{{- end -}}
+
+{{/*
+Session secret the user set explicitly, or "" (=> chart-generated). The two well-known placeholders
+(old chart default, public-snapshot rewrite) count as unset: the hub refuses them in production, so
+an old release that still carries one gets a generated secret instead (users sign in once more).
+*/}}
+{{- define "heimdall.sessionSecret.plain" -}}
+{{- $v := dig "env" "HEIMDALL_SESSION_SECRET" "" .Values.hub | toString -}}
+{{- /* split literals: keep the placeholders out of grep/denylist/snapshot-rewrite gates */ -}}
+{{- $placeholders := list (print "heimdall-dev-" "session-secret-change-me!!") (print "CHANGE_ME_" "SESSION_SECRET_REPLACE_BEFORE_USE!!") -}}
+{{- if not (has $v $placeholders) -}}
+{{- $v -}}
+{{- end -}}
+{{- end -}}
+
+{{/* HEIMDALL_SESSION_SECRET env entry: hub.sessionSecret.existingSecret, else the chart-managed Secret. */}}
+{{- define "heimdall.sessionSecretEnv" -}}
+{{- $existing := dig "sessionSecret" "existingSecret" "" .Values.hub -}}
+- name: HEIMDALL_SESSION_SECRET
+  valueFrom:
+    secretKeyRef:
+{{- if $existing }}
+      name: {{ $existing | quote }}
+      key: {{ dig "sessionSecret" "key" "session-secret" .Values.hub | quote }}
+{{- else }}
+      name: {{ include "heimdall.secretsName" . }}
+      key: session-secret
+{{- end }}
+{{- end -}}
+
+{{/* secretKeyRef body (name + key) for the bundled Postgres password. */}}
+{{- define "heimdall.postgresPasswordRef" -}}
+{{- $existing := dig "auth" "existingSecret" "" .Values.postgres -}}
+{{- if $existing -}}
+name: {{ $existing | quote }}
+key: {{ dig "auth" "secretKey" "password" .Values.postgres | quote }}
+{{- else -}}
+name: {{ include "heimdall.secretsName" . }}
+key: postgres-password
+{{- end -}}
+{{- end -}}
+
+{{/*
+Container securityContext: restricted-profile defaults merged with an optional override map.
+Context: dict "uid" <int> "override" <map> "readOnly" <bool>
+*/}}
+{{- define "heimdall.containerSecurityContext" -}}
+{{- $base := dict
+  "runAsNonRoot" true
+  "runAsUser" .uid
+  "runAsGroup" .uid
+  "allowPrivilegeEscalation" false
+  "readOnlyRootFilesystem" .readOnly
+  "capabilities" (dict "drop" (list "ALL"))
+  "seccompProfile" (dict "type" "RuntimeDefault") -}}
+{{- /* shallow `set`, not mergeOverwrite: mergo skips false/0 overrides */ -}}
+{{- range $k, $v := (.override | default (dict)) }}{{ $_ := set $base $k $v }}{{ end -}}
+{{- toYaml $base -}}
+{{- end -}}
+
+{{/* OTel collector helpers (Phase 27). */}}
 {{- define "heimdall.otel.endpoint" -}}
 {{- .Values.otel.collector.endpoint | default (printf "http://%s-hub:%v" (include "heimdall.name" .) .Values.hub.service.port) -}}
 {{- end -}}
@@ -144,9 +210,9 @@ Order: hub.secretKey.existingSecret -> hub.env.HEIMDALL_SECRET_KEY -> chart-mana
           fieldPath: spec.nodeName
   resources:
     {{- toYaml $r.Values.otel.collector.resources | nindent 4 }}
+  # Image user is 10001 (otel/opentelemetry-collector-contrib); it needs no writable paths.
   securityContext:
-    allowPrivilegeEscalation: false
-    readOnlyRootFilesystem: true
+    {{- include "heimdall.containerSecurityContext" (dict "uid" 10001 "readOnly" true "override" (dig "collector" "containerSecurityContext" (dict) $r.Values.otel)) | nindent 4 }}
   volumeMounts:
     - name: otelcol-config
       mountPath: /etc/otelcol

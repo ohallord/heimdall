@@ -1,4 +1,4 @@
-# Network security depth
+# Network security depth (Phase 21)
 
 Heimdall deepens network posture without becoming an NMS or full CSPM:
 
@@ -14,7 +14,7 @@ New events store `device` and `category` on the alert payload. The Network page 
 Requires:
 
 - Agent with K8s collection enabled (`HEIMDALL_ENABLE_K8S` / helm agent)
-- Helm chart RBAC that can **list** `services`, `namespaces`, and `networking.k8s.io/networkpolicies`
+- Helm chart RBAC that can **list** `services`, `namespaces`, and `networking.k8s.io/networkpolicies` (Phase 21 chart update)
 
 Upgrade the Heimdall helm release (or patch the agent ClusterRole) so collection is not empty. Missing RBAC soft-fails: cluster health still reports; exposure lists stay empty.
 

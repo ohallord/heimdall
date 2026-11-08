@@ -9,7 +9,9 @@ cd "$(dirname "$0")/.."
 OUT="${OUT:-$HOME/heimdall-pg-recovery}"
 VOL="${VOL:-heimdall_heimdall_pg}"
 NS="${K8S_NAMESPACE:-heimdall}"
-LOGDIR="tmp/runner/pg-recover"; mkdir -p "$LOGDIR" "$OUT"
+# Dumps hold every secret in the DB: private dirs (umask 077), no predictable shared /tmp paths.
+umask 077
+LOGDIR="tmp/runner/pg-recover"; mkdir -p "$LOGDIR" "$OUT"; chmod 700 "$OUT"
 exec > >(tee -a "$LOGDIR/${1:-none}.log") 2>&1
 log() { printf '==> %s\n' "$*"; }
 
@@ -26,8 +28,10 @@ dump)
     -v heimdall_pg_recover:/var/lib/postgresql/data postgres:16-alpine -D /var/lib/postgresql/data >/dev/null
   for i in $(seq 1 60); do docker exec pg-recover pg_isready -U heimdall -d heimdall >/dev/null 2>&1 && break; sleep 1; done
   docker exec pg-recover pg_isready -U heimdall -d heimdall || { docker logs pg-recover 2>&1 | tail -20; exit 1; }
-  docker exec pg-recover pg_dump -U heimdall -d heimdall --format=custom --file=/tmp/heimdall.dump
-  docker cp pg-recover:/tmp/heimdall.dump "$OUT/heimdall-from-volume.dump"
+  RDIR="$(docker exec pg-recover mktemp -d | tr -d '\r\n')"
+  [[ "$RDIR" == /tmp/* ]] || { echo "unexpected temp dir in pg-recover: $RDIR"; exit 1; }
+  docker exec pg-recover pg_dump -U heimdall -d heimdall --format=custom --file="$RDIR/heimdall.dump"
+  docker cp "pg-recover:$RDIR/heimdall.dump" "$OUT/heimdall-from-volume.dump"
   chmod 600 "$OUT/heimdall-from-volume.dump"
   log "freshness check"
   docker exec pg-recover psql -U heimdall -d heimdall -Atc \
@@ -90,8 +94,11 @@ restore)
   POD="$(kubectl -n "$NS" get pods -l app.kubernetes.io/component=postgres -o jsonpath='{.items[0].metadata.name}')"
   log "pg pod $POD; hub off during restore"
   kubectl -n "$NS" scale deploy/heimdall-hub --replicas=0
-  kubectl -n "$NS" cp "$DUMP" "$POD:/tmp/heimdall.dump"
-  kubectl -n "$NS" exec "$POD" -- pg_restore -U heimdall -d heimdall --clean --if-exists --no-owner /tmp/heimdall.dump || true
+  RDIR="$(kubectl -n "$NS" exec "$POD" -- mktemp -d | tr -d '\r\n')"
+  [[ "$RDIR" == /tmp/* ]] || { echo "unexpected temp dir in $POD: $RDIR"; exit 1; }
+  trap 'kubectl -n "$NS" exec "$POD" -- rm -rf "$RDIR" >/dev/null 2>&1 || true' EXIT
+  kubectl -n "$NS" cp "$DUMP" "$POD:$RDIR/heimdall.dump"
+  kubectl -n "$NS" exec "$POD" -- pg_restore -U heimdall -d heimdall --clean --if-exists --no-owner "$RDIR/heimdall.dump" || true
   kubectl -n "$NS" exec "$POD" -- psql -U heimdall -d heimdall -Atc "select count(*) from users"
   kubectl -n "$NS" scale deploy/heimdall-hub --replicas=1
   kubectl -n "$NS" rollout status deploy/heimdall-hub --timeout=180s

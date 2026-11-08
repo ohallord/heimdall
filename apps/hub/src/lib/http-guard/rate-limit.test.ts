@@ -70,3 +70,12 @@ describe("tooMany", () => {
     expect(res.headers.get("retry-after")).toBe("7");
   });
 });
+
+describe("bucket map is bounded", () => {
+  it("evicts old buckets instead of growing without limit", async () => {
+    const { bucketCount, limit, resetRateLimits } = await import("./rate-limit");
+    resetRateLimits();
+    for (let i = 0; i < 60_000; i++) limit({ key: `random-token-${i}`, max: 5, windowMs: 60_000 });
+    expect(bucketCount()).toBeLessThanOrEqual(50_000);
+  });
+});

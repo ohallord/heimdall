@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { requireSession } from "@/lib/auth/session";
 import { revokeAgentToken } from "@/lib/db/store";
 import { mutating } from "@/lib/http-guard/mutating";
@@ -16,8 +17,7 @@ async function deleteHandler(_req: Request, ctx: Ctx) {
     if (!ok) return NextResponse.json({ error: "token not found" }, { status: 404 });
     return NextResponse.json({ ok: true, id: tokenId });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status });
+    return apiError(err);
   }
 }
 

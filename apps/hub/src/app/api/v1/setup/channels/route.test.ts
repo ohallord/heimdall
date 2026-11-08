@@ -14,6 +14,7 @@ vi.mock("@/lib/db/store", () => ({
   ensureDefaultThresholdRule: (...args: unknown[]) =>
     ensureDefaultThresholdRule(...args),
   setSetupStep: (...args: unknown[]) => setSetupStep(...args),
+  isSetupComplete: async () => false,
 }));
 
 describe("POST /api/v1/setup/channels", () => {

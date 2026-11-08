@@ -1,3 +1,4 @@
+import { insecureOptIn } from "@/lib/host-dist";
 export type InstallSnippets = {
   systemd: string;
   docker: string;
@@ -39,13 +40,14 @@ export function buildInstallSnippets(input: {
   const hub = input.hubUrl.replace(/\/$/, "");
   const token = input.token;
   const local = isLocalHubUrl(hub);
+  const opt = insecureOptIn(hub);
   const oneCommand = `# One command (Linux + systemd, x86_64/aarch64), agent served by this hub:
-#   curl -fsSL ${hub}/install.sh | sudo bash                 # prompts for the token below
+#   curl -fsSL ${hub}/install.sh | sudo ${opt}bash                 # prompts for the token below
 # Non-interactive (the token ends up in sudo's system log):
-#   curl -fsSL ${hub}/install.sh | sudo TOKEN=${token} bash
+#   curl -fsSL ${hub}/install.sh | sudo ${opt}TOKEN=${token} bash
 # Agent + OTel collector (metrics, logs, traces; prompts for both tokens):
-#   curl -fsSL ${hub}/install.sh | sudo OTEL=1 bash
-# Remove: curl -fsSL ${hub}/install.sh | sudo bash -s -- --uninstall
+#   curl -fsSL ${hub}/install.sh | sudo ${opt}OTEL=1 bash
+# Remove: curl -fsSL ${hub}/install.sh | sudo ${opt}bash -s -- --uninstall
 #
 # Manual alternatives below.
 `;

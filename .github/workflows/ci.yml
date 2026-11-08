@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: no job writes to the repo, packages, or PRs.
+permissions:
+  contents: read
+
+# Actions are pinned to full commit SHAs (tag in the comment); Dependabot bumps them.
 jobs:
   hub:
     runs-on: ubuntu-latest
@@ -13,11 +18,13 @@ jobs:
       run:
         working-directory: apps/hub
     steps:
-      - uses: actions/checkout@v4
-      - name: No shipped default bootstrap token
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: No shipped default bootstrap token / session secret
         working-directory: .
         run: ./scripts/check-no-default-token.sh
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
           cache: npm
@@ -33,26 +40,35 @@ jobs:
       run:
         working-directory: apps/agent
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          go-version: "1.23.x"
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: apps/agent/go.sum
       - run: go test ./...
       - run: go build -o /tmp/heimdall-agent ./cmd/agent
+      - name: govulncheck (reachable vulns in deps + stdlib)
+        # Module version is immutable (checksum DB); bump deliberately.
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   handshake:
     runs-on: ubuntu-latest
     needs: [hub, agent]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: apps/hub/package-lock.json
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: "1.23.x"
+          go-version: "1.26.x"
+          cache-dependency-path: apps/agent/go.sum
       - name: Install hub deps and build
         working-directory: apps/hub
         run: |
@@ -61,18 +77,21 @@ jobs:
       - name: Handshake smoke
         env:
           HEIMDALL_DB_DRIVER: pglite
-          HEIMDALL_SESSION_SECRET: heimdall-dev-session-secret-change-me!!
+          # Test-only value; never one of the placeholders the hub refuses in production.
+          HEIMDALL_SESSION_SECRET: ci-smoke-session-secret-test-only-not-for-production
         run: ./scripts/handshake-smoke.sh
 
   images:
     runs-on: ubuntu-latest
     needs: [hub, agent]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: Build hub image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: apps/hub
           push: false
@@ -84,12 +103,12 @@ jobs:
             deploy=deploy
           build-args: |
             AGENT_VERSION=${{ github.sha }}
-      - name: Hub image serves agent downloads
+      - name: Hub image serves agent downloads (Phase 31)
         run: |
           docker run --rm --entrypoint sh heimdall/hub:ci -c \
             "cd /app/dist && sha256sum -c SHA256SUMS && grep -q heimdall-agent-linux-amd64 SHA256SUMS && grep -q heimdall-agent-linux-arm64 SHA256SUMS && grep -q install-host.sh SHA256SUMS"
       - name: Build agent image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: apps/agent
           push: false
@@ -98,8 +117,10 @@ jobs:
   helm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v3.16.2
       - name: Chart refuses to render without a bootstrap token
@@ -123,10 +144,14 @@ jobs:
           grep -q 'name: HEIMDALL_SECRET_KEY' /tmp/heimdall-manifests.yaml
           grep -q 'hub-secret-key' /tmp/heimdall-manifests.yaml
           helm template heimdall deploy/helm/heimdall --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=ci-test-token --set-string hub.extraEnv.HEIMDALL_ALLOW_PRIVATE_HOSTS=gitlab.lan | grep -q 'HEIMDALL_ALLOW_PRIVATE_HOSTS'
-          grep -q 'name: host-root' /tmp/heimdall-manifests.yaml
-          grep -q 'path: "/"' /tmp/heimdall-manifests.yaml
           grep -q 'HEIMDALL_WATCH_MOUNTS' /tmp/heimdall-manifests.yaml
-          grep -q '/host,/host/var' /tmp/heimdall-manifests.yaml
+          # hostMounts is opt-in (values-host-mounts.yaml / --set agent.hostMounts.enabled=true).
+          if grep -q 'name: host-root' /tmp/heimdall-manifests.yaml; then echo "hostMounts on by default" >&2; exit 1; fi
+          helm template heimdall deploy/helm/heimdall --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=ci-test-token \
+            --set agent.hostMounts.enabled=true >/tmp/hm-on.yaml
+          grep -q 'name: host-root' /tmp/hm-on.yaml
+          grep -q 'path: "/"' /tmp/hm-on.yaml
+          grep -q '/host,/host/var' /tmp/hm-on.yaml
           test -s /tmp/heimdall-manifests.yaml
       - name: Helm hostMounts partial -f (empty hostRoot/mountPath defaults)
         run: |
@@ -147,13 +172,19 @@ jobs:
             --set agent.hostMounts.mountPath= >/tmp/hm-empty.yaml
           grep -A3 'hostPath:' /tmp/hm-empty.yaml | grep -q 'path: "/"'
           grep -A2 'name: host-root' /tmp/hm-empty.yaml | grep -q 'mountPath: "/host"'
-      - name: Helm OTel collector
+      - name: Helm OTel collector (Phase 27)
         run: ./scripts/test-helm-otel.sh
+      - name: Helm secrets, securityContext, NetworkPolicy (security review)
+        run: ./scripts/test-helm-security.sh
+      - name: Compose secrets, loopback Postgres, agent capabilities (security review)
+        run: ./scripts/test-compose-security.sh
+      - name: Migration backups use private temp dirs (security review)
+        run: ./scripts/test-migrate-tmp.sh
       - name: deploy-cluster.sh keeps new chart defaults on upgrade
         run: ./scripts/test-deploy-cluster-helm.sh
       - name: deploy-cluster.sh fails closed when k3s import needs sudo
         run: ./scripts/test-deploy-cluster-import.sh
-      - name: OTel install scripts
+      - name: OTel install scripts (Phase 28)
         run: |
           ./scripts/test-install-otelcol.sh
           ./scripts/test-install-otel-k8s.sh

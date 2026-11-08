@@ -4,8 +4,9 @@ import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { getSession } from "@/lib/auth/session";
-import { findUserByEmail } from "@/lib/db/store";
-import { clearLimit, clientIp, isBlocked, limit, presetFor, tooMany } from "@/lib/http-guard/rate-limit";
+import { findUserByLogin } from "@/lib/db/store";
+import { readJsonLimited } from "@/lib/http-guard/body";
+import { clearLimit, clientIp, limit, presetFor, tooMany } from "@/lib/http-guard/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,29 +18,42 @@ function getDummyHash() {
   return dummyHash;
 }
 
+const loginId = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .refine(
+    (value) =>
+      z.string().email().safeParse(value).success ||
+      /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(value),
+  );
+
 const schema = z.object({
-  email: z.string().email(),
+  email: loginId,
   password: z.string().min(1),
 });
 
 async function postHandler(request: Request) {
-  const body = schema.safeParse(await request.json().catch(() => null));
+  const raw = await readJsonLimited(request, 8 * 1024);
+  const body = schema.safeParse(raw.ok ? raw.value : null);
   if (!body.success) {
     return NextResponse.json({ error: "invalid credentials payload" }, { status: 400 });
   }
 
   const rl = presetFor("LOGIN");
   const rlKey = `login|${clientIp(request)}|${body.data.email.toLowerCase()}`;
-  const gate = isBlocked({ key: rlKey, max: rl.max });
-  if (gate.blocked) return tooMany(gate.retryAfter);
+  // Count the attempt before the (slow) password check so parallel bursts cannot all slip
+  // past the gate; a success clears the bucket.
+  const hit = limit({ key: rlKey, ...rl });
+  if (!hit.allowed) return tooMany(hit.retryAfter);
 
-  const user = await findUserByEmail(body.data.email);
+  const user = await findUserByLogin(body.data.email);
   const passwordOk = await verifyPassword(
     body.data.password,
     user ? user.password_hash : await getDummyHash(),
   );
   if (!user || !passwordOk) {
-    limit({ key: rlKey, ...rl });
     return NextResponse.json({ error: "invalid email or password" }, { status: 401 });
   }
 
@@ -50,6 +64,7 @@ async function postHandler(request: Request) {
   session.email = user.email;
   session.role = user.role;
   session.isLoggedIn = true;
+  session.sessionVersion = Number(user.session_version ?? 0);
   // Admins with MFA enrolled must verify MFA next.
   if (user.role === "admin" && user.mfa_enrolled) {
     session.mfaVerified = false;

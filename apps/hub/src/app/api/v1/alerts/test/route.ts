@@ -1,5 +1,6 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
 import { dispatchAlert, evaluateRule } from "@/lib/alerts/engine";
 import { requireSession } from "@/lib/auth/session";
@@ -88,11 +89,7 @@ async function postHandler(request: Request) {
       results,
     });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

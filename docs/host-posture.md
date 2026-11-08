@@ -1,4 +1,4 @@
-# Host posture
+# Host posture (Phase 13)
 
 Scan a server’s root filesystem with Trivy and show OS package CVEs plus misconfigs in Heimdall as findings source **`host_posture`**.
 

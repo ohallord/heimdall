@@ -8,7 +8,7 @@ Heimdall is configured through environment variables. Settings stored in the dat
 
 | Variable | Description |
 | --- | --- |
-| `HEIMDALL_SESSION_SECRET` | Key for the sealed session cookie, at least 32 characters. When `NODE_ENV=production`, the hub refuses to start without it. |
+| `HEIMDALL_SESSION_SECRET` | Key for the sealed session cookie, at least 32 characters. When `NODE_ENV=production`, the hub refuses to start without it, or with a value that has appeared in a published file. Sessions last 12 hours and are re-checked against the database on every request; logout revokes them. |
 | `HEIMDALL_SECRET_KEY` | 32-byte key (hex or base64) for AES-256-GCM encryption of stored secrets. Required with Postgres or in production. PGlite dev mode creates `$HEIMDALL_DATA_DIR/secret.key` automatically. **Back it up.** |
 | `HEIMDALL_BOOTSTRAP_TOKEN` | Hub-wide token that agents can register with. No default is shipped. Can later be rotated to an `hdb_` value or disabled in the UI. |
 | `HEIMDALL_PUBLIC_URL` | Canonical public origin, such as `https://heimdall.example.com`. Used for SSO callbacks, CSRF origin checks, the cookie `Secure` flag, the URL baked into `/install.sh`, and alert deep links. |
@@ -29,6 +29,7 @@ Heimdall is configured through environment variables. Settings stored in the dat
 | Variable | Default | Description |
 | --- | --- | --- |
 | `HEIMDALL_LEGACY_TOKENS` | on | Set to `off` to reject agents that still authenticate with shared (non-per-agent) tokens |
+| `HEIMDALL_ALLOW_INSECURE` | off | Agent and installers: accept a plain-http hub URL on a public host. Plain http on loopback, in-cluster names and private networks is accepted by the agent with a warning; the root installer always needs this opt-in for non-loopback http |
 | `HEIMDALL_DEV` | unset | `1` accepts the well-known development token (see the README quick start) when no bootstrap token is set. Ignored when `NODE_ENV=production` |
 
 ### Alerts
@@ -129,7 +130,7 @@ Main keys of `deploy/helm/heimdall/values.yaml`:
 | `agent.enableK8s` | `"true"` | |
 | `agent.rbac.create` | `true` | ClusterRole for nodes, pods, deployments, services, namespaces, NetworkPolicies |
 | `agent.state.persistence.*` | enabled, `16Mi` | PVC for the agent secret |
-| `agent.hostMounts.enabled` | `true` | Mount host `/` read-only at `/host` |
+| `agent.hostMounts.enabled` | `false` | Mount host `/` read-only at `/host` (`values-host-mounts.yaml` turns it on) |
 | `agent.hostMounts.watchMounts` | `[/host, /host/var]` | YAML list |
 | `postgres.enabled` | `true` | Bundled Postgres 16 |
 | `postgres.persistence.*` | enabled, `2Gi` | PVC (kept on uninstall) |

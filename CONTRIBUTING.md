@@ -8,7 +8,7 @@ Prerequisites: Node.js 22+, Go 1.22+ (CI uses 1.23), and optionally Docker with 
 # Hub (uses embedded PGlite; no database needed)
 cd apps/hub && npm ci
 export HEIMDALL_BOOTSTRAP_TOKEN=$(openssl rand -hex 16)
-HEIMDALL_SESSION_SECRET=heimdall-dev-session-secret-change-me!! \
+HEIMDALL_SESSION_SECRET=CHANGE_ME_SESSION_SECRET_REPLACE_BEFORE_USE!! \
 HEIMDALL_PUBLIC_URL=http://127.0.0.1:43123 \
 npm run dev -- --port 43123
 

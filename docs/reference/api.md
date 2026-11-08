@@ -46,7 +46,7 @@ Session requests that change state (`POST`, `PUT`, `PATCH`, `DELETE`) must come 
 
 | Method | Path | Permission |
 | --- | --- | --- |
-| POST | `/api/v1/setup/org-admin` | none (first run only) |
+| POST | `/api/v1/setup/org-admin` | bootstrap token in `setupToken` (first run only, one admin) |
 | POST | `/api/v1/setup/channels` | `setup:run`. Upserts SMTP, Slack, Discord and SMS channels; works after setup too |
 | POST | `/api/v1/setup/agent-token` | `setup:run` |
 | POST | `/api/v1/setup/remotes` | `setup:run` |

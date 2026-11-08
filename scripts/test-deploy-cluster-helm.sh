@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regression: `deploy-cluster.sh helm` must merge new chart defaults into reused release values.
-# Plain --reuse-values dropped new `otel:` defaults → nil pointer at .Values.otel.collector.
+# Plain --reuse-values dropped Phase 27's `otel:` defaults → nil pointer at .Values.otel.collector.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 fail() { echo "FAIL: $*" >&2; exit 1; }

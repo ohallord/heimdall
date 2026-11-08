@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { requireSession } from "@/lib/auth/session";
 import { ensureHostMetricRules } from "@/lib/metrics/ingest";
 import { listAlertRules } from "@/lib/db/store";
@@ -24,10 +25,6 @@ export async function GET() {
       })),
     });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }

@@ -1,4 +1,4 @@
-# UniFi alerts
+# UniFi alerts (Phase 14)
 
 Send UniFi **Alarm Manager** events into Heimdall via a shared-secret webhook. Events appear on **Network** and **Alert history**. Critical severities also fan out to configured notification channels.
 

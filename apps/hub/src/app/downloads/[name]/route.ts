@@ -4,7 +4,7 @@ import { DIST_MISSING_HINT, readManifest, resolveDistFile } from "@/lib/host-dis
 
 export const dynamic = "force-dynamic";
 
-/** Public agent + installer downloads. Only names listed in SHA256SUMS are served. */
+/** Public agent + installer downloads (Phase 31). Only names listed in SHA256SUMS are served. */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ name: string }> },

@@ -36,9 +36,9 @@ Do not default to dark mode. Prefer a subtle grid/gradient atmosphere over a fla
 ## Layout
 
 - First viewport of product surfaces: brand mark + one clear operational headline + short support line + primary action.
-- No hero marketing cards, floating badges, or stat strips.
+- No hero marketing cards, floating badges, or stat strips in Phase 0 stubs.
 - Sections have one job, one headline, usually one supporting sentence.
 
-## Components
+## Components (later phases)
 
-Prefer sharp corners and hairline borders over rounded-full pills. Restyle any third-party primitives to these tokens.
+Primitives will come from shadcn/ui, restyled to these tokens. Prefer sharp corners and hairline borders over rounded-full pills.

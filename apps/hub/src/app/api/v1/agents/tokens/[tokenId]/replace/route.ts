@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { requireSession } from "@/lib/auth/session";
 import { createAgentToken, getAgentToken, revokeAgentToken } from "@/lib/db/store";
 import { installCommandsFor } from "@/lib/host-dist";
@@ -45,8 +46,7 @@ async function postHandler(request: Request, ctx: Ctx) {
       { status: 201 },
     );
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json({ error: err instanceof Error ? err.message : "error" }, { status });
+    return apiError(err);
   }
 }
 

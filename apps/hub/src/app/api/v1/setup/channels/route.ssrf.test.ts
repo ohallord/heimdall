@@ -7,6 +7,7 @@ vi.mock("@/lib/db/store", () => ({
   upsertAlertChannel: (...a: unknown[]) => upsertAlertChannel(...a),
   ensureDefaultThresholdRule: async () => {},
   setSetupStep: async () => {},
+  isSetupComplete: async () => false,
 }));
 
 const post = (body: unknown) =>
@@ -15,6 +16,35 @@ const post = (body: unknown) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+
+describe("setup/channels SMTP host validation", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    requireSession.mockResolvedValue({ orgId: "o", userId: "u", role: "admin" });
+    upsertAlertChannel.mockResolvedValue({});
+  });
+  afterEach(() => {
+    delete process.env.HEIMDALL_ALLOW_PRIVATE_HOSTS;
+  });
+
+  it.each(["127.0.0.1", "169.254.169.254", "::1", "10.0.0.25"])(
+    "rejects SMTP host %s (internal port probe) and saves nothing",
+    async (host) => {
+      const { POST } = await import("./route");
+      const res = await POST(post({ smtp: { host, port: 25, from: "a@x.io", to: "b@x.io" } }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("blocked_host");
+      expect(upsertAlertChannel).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts a LAN relay once allowlisted", async () => {
+    process.env.HEIMDALL_ALLOW_PRIVATE_HOSTS = "10.0.0.25";
+    const { POST } = await import("./route");
+    const res = await POST(post({ smtp: { host: "10.0.0.25", port: 25, from: "a@x.io", to: "b@x.io" } }));
+    expect(res.status).toBe(200);
+  });
+});
 
 describe("setup/channels save-time URL validation", () => {
   beforeEach(() => {

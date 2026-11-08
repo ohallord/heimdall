@@ -14,7 +14,7 @@
 #   filelog.include — optional extra files (e.g. /var/log/myapp/*.log)
 
 receivers:
-  # Apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
+  # Phase 29: apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
   otlp:
     protocols:
       grpc:

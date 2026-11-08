@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the files the hub serves at /downloads/* and /install.sh.
+# Phase 31: build the files the hub serves at /downloads/* and /install.sh.
 #
 #   ./scripts/build-dist.sh [OUT]         default OUT: apps/hub/dist (gitignored)
 #

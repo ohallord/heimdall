@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Heimdall favicon">
+  <title>Heimdall favicon</title>
+  <desc>Simplified watchtower plus outer Bifrost arc only for small sizes.</desc>
+  <g fill="none" fill-rule="evenodd">
+    <path d="M16 100 A48 48 0 0 1 112 100" stroke="#5B2C8A" stroke-width="10" stroke-linecap="butt"/>
+    <path fill="#F3EDE0" d="M52 30 L76 30 L76 88 L52 88 Z"/>
+    <path fill="#F3EDE0" d="M48 30 L64 10 L80 30 Z"/>
+    <rect x="56" y="38" width="16" height="12" rx="1" fill="#0A1628"/>
+    <rect x="46" y="88" width="36" height="8" fill="#F3EDE0"/>
+  </g>
+</svg>

@@ -1,11 +1,15 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
+import { setupClosed } from "@/lib/auth/setup-guard";
 import { requireSession } from "@/lib/auth/session";
 import { findUserById, markSetupComplete } from "@/lib/db/store";
 
 export const dynamic = "force-dynamic";
 
 async function postHandler() {
+  const closed = await setupClosed();
+  if (closed) return closed;
   try {
     const session = await requireSession({
       permission: "setup:run",
@@ -25,11 +29,7 @@ async function postHandler() {
     await markSetupComplete(session.orgId!);
     return NextResponse.json({ complete: true, next: "/dashboard" });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

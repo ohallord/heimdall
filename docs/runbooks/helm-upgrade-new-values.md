@@ -1,8 +1,8 @@
 # Helm upgrade fails with `nil pointer evaluating interface {}.<key>`
 
 ## Symptom
-`./scripts/deploy-cluster.sh` fails at the Helm step right after a release adds a new top-level
-values block to the chart, for example `otel:`:
+`./scripts/deploy-cluster.sh` fails at the Helm step right after a phase adds a new top-level
+values block, e.g. Phase 27:
 
 ```
 Error: UPGRADE FAILED: template: heimdall/templates/otel-collector.yaml:1:14: ...

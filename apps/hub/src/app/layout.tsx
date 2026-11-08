@@ -17,6 +17,21 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Heimdall",
   description: "Self-hosted monitoring hub and agents",
+  openGraph: {
+    title: "Heimdall",
+    description: "Self-hosted monitoring hub and agents",
+    images: [{ url: "/brand/og.png", width: 1280, height: 640, alt: "Heimdall" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Heimdall",
+    description: "Self-hosted monitoring hub and agents",
+    images: ["/brand/og.png"],
+  },
+  icons: {
+    icon: [{ url: "/favicon.ico" }, { url: "/icon.png", type: "image/png" }],
+    apple: [{ url: "/apple-icon.png" }],
+  },
 };
 
 export default function RootLayout({

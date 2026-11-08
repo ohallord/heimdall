@@ -4,7 +4,7 @@
 {{- if not (and $c.enabled $c.traces (ne $c.mode "sidecar")) }}
 {{- fail "otel.beyla.enabled requires otel.collector.enabled=true, otel.collector.traces=true and mode=daemonset" }}
 {{- end }}
-# Grafana Beyla eBPF auto-instrumentation. Gives HTTP/gRPC server+client spans for
+# Phase 33: Grafana Beyla eBPF auto-instrumentation. Gives HTTP/gRPC server+client spans for
 # apps without an OTel SDK (Plex, Jellyfin, Emby, Syncthing...). Spans go to the node-local
 # collector Service, which forwards them to the hub as OTLP/JSON.
 apiVersion: v1

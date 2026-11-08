@@ -1,4 +1,4 @@
-# Optional overlay for single-node / k3s labs.
+# Optional overlay for single-node / homelab labs.
 # Usage: helm upgrade --reuse-values … -f deploy/helm/heimdall/values-host-mounts.yaml
 #
 # Prefer this file over --set for watchMounts (Helm splits commas in --set-string).
@@ -7,7 +7,7 @@ agent:
     enabled: true
     watchMounts:
       - /host
-      # /var is not a separate mount on many single-disk hosts, so the agent reports it "missing".
+      # /var is not a separate mount on homelab (root disk), so the agent reports it "missing".
       # Watch the real data disks instead (paths as seen under the /host mount).
       - /host/media1
       - /host/media/Movies

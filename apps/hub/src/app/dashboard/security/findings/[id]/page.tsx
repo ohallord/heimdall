@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { safeHttpUrl } from "@/lib/security/safe-url";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { FindingResolveButton } from "@/components/finding-resolve-button";
@@ -91,9 +92,9 @@ export default async function FindingDetailPage({
         <Field
           label="Advisory"
           value={
-            finding.url ? (
+            safeHttpUrl(finding.url) ? (
               <a
-                href={finding.url}
+                href={safeHttpUrl(finding.url)!}
                 className="text-signal underline"
                 target="_blank"
                 rel="noreferrer"

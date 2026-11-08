@@ -17,12 +17,18 @@ export default async function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-8 px-6 py-10">
       <header className="border-b border-border pb-6">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-signal">
-          Self-hosted monitoring
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight text-foreground">
-          Heimdall
-        </h1>
+        <div className="flex items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand SVG */}
+          <img src="/brand/mark-light.svg" alt="" width={48} height={48} />
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-signal">
+              Heimdall
+            </p>
+            <h1 className="mt-1 text-4xl font-semibold tracking-tight text-foreground">
+              Operator console
+            </h1>
+          </div>
+        </div>
         <p className="mt-3 max-w-2xl text-base text-muted">
           Self-hosted monitoring hub with first-run setup, RBAC, MFA, and alert
           channel plumbing.

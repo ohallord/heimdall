@@ -37,7 +37,7 @@ describe("log rule engine (golden fixtures)", () => {
 
   it("tags routine sudo commands as audit-only, not sudo abuse", () => {
     const ok = evaluateLogLine(
-      "Nov  1 20:11:52 host01 sudo: alice : TTY=/dev/pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/bash",
+      "Nov  1 20:11:52 homelab sudo: dan : TTY=/dev/pts/0 ; PWD=/home/dan ; USER=root ; COMMAND=/usr/bin/bash",
     );
     expect(ok.matches.map((m) => m.ruleId)).toEqual(["sudo_command"]);
     expect(highestSeverity(ok.matches)).toBe("low");

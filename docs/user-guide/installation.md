@@ -30,17 +30,18 @@ The hub listens on port **43123**.
 
 ## Generate secrets first
 
-Every path needs these three values. Generate them and keep them somewhere safe, such as a password manager:
+Every path needs these values. Nothing secret ships with Heimdall: Compose refuses to start without them, and Helm generates the session secret and database password for you. Generate them and keep them somewhere safe, such as a password manager:
 
 ```bash
-openssl rand -hex 32   # HEIMDALL_BOOTSTRAP_TOKEN – lets the first agents register
+openssl rand -hex 32   # HEIMDALL_BOOTSTRAP_TOKEN – lets the first agents register; the setup wizard asks for it
 openssl rand -hex 32   # HEIMDALL_SECRET_KEY      – encrypts stored secrets. BACK THIS UP.
-openssl rand -hex 24   # HEIMDALL_SESSION_SECRET  – signs login cookies (≥ 32 characters)
+openssl rand -hex 32   # HEIMDALL_SESSION_SECRET  – signs login cookies (Compose / standalone)
+openssl rand -hex 24   # POSTGRES_PASSWORD        – database password (Compose)
 ```
 
 **Back up `HEIMDALL_SECRET_KEY`.** It encrypts TOTP seeds, SSO client secrets, and alert and Git credentials in the database. If you lose it, those secrets cannot be recovered and must be re-entered.
 
-Also decide your **public URL**: the exact address people type in the browser, such as `https://heimdall.example.com` or `http://192.168.1.10:43123`. Passkeys, SSO callbacks, CSRF protection and secure cookies all depend on it.
+Also decide your **public URL**: the exact address people type in the browser, such as `https://heimdall.example.com` or `http://203.0.113.10:43123`. Passkeys, SSO callbacks, CSRF protection and secure cookies all depend on it.
 
 ---
 
@@ -52,6 +53,8 @@ git clone <your heimdall repo> heimdall && cd heimdall/deploy/docker
 cat > .env <<EOF
 HEIMDALL_BOOTSTRAP_TOKEN=$(openssl rand -hex 32)
 HEIMDALL_SECRET_KEY=$(openssl rand -hex 32)
+HEIMDALL_SESSION_SECRET=$(openssl rand -hex 32)
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
 DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
 EOF
 chmod 600 .env
@@ -61,19 +64,18 @@ docker compose up -d --build
 
 This starts:
 
-- **postgres**: PostgreSQL 16, data in the `heimdall_pg` volume, exposed on host port `54329`
+- **postgres**: PostgreSQL 16, data in the `heimdall_pg` volume, reachable from the Docker host only on `127.0.0.1:54329`
 - **hub**: the console at <http://127.0.0.1:43123>
 - **agent**: a sample agent named `compose-agent-01` that monitors the Docker host and its containers
 
-Compose refuses to start if either required token is missing.
+Compose refuses to start if any required value is missing. The hub also refuses any session secret that has appeared in a published file.
 
-**Before using Compose beyond your own machine**, change the values hard-coded for local use in `compose.yaml`. In particular, the default `HEIMDALL_SESSION_SECRET` is published in this repository, and anyone who knows it can forge a login session. Put your values in a `compose.override.yaml` so `git pull` does not conflict:
+**Before using Compose beyond your own machine**, set your public address. Put the values in a `compose.override.yaml` so `git pull` does not conflict:
 
 ```yaml
 services:
   hub:
     environment:
-      HEIMDALL_SESSION_SECRET: "<your 32+ char secret>"
       HEIMDALL_PUBLIC_URL: "https://heimdall.example.com"
       HEIMDALL_ORIGIN: "https://heimdall.example.com"
       HEIMDALL_RP_ID: "heimdall.example.com"
@@ -105,7 +107,6 @@ kubectl -n heimdall create secret generic heimdall-bootstrap \
 
 helm upgrade --install heimdall deploy/helm/heimdall -n heimdall \
   --set hub.existingSecret.name=heimdall-bootstrap \
-  --set-string hub.env.HEIMDALL_SESSION_SECRET="<32+ char secret>" \
   --set-string hub.env.HEIMDALL_PUBLIC_URL=https://heimdall.example.com \
   --set-string hub.env.HEIMDALL_ORIGIN=https://heimdall.example.com \
   --set-string hub.env.HEIMDALL_RP_ID=heimdall.example.com \
@@ -119,8 +120,10 @@ Notes:
 - The hub Service is `ClusterIP` on port 43123. Expose it with your Ingress, or change `hub.service.type`.
 - The chart **generates `HEIMDALL_SECRET_KEY`** as Secret `heimdall-hub-secret-key` on first install and keeps it across upgrades and uninstalls. Back it up now:
   `kubectl -n heimdall get secret heimdall-hub-secret-key -o jsonpath='{.data.key}' | base64 -d`
-- If you render with `helm template` (for example Argo CD), create the key Secret yourself and set `hub.secretKey.existingSecret`. Otherwise a new key is generated on every render.
-- The agent mounts the host root read-only at `/host` to measure real disk usage. If your cluster forbids hostPath, set `agent.hostMounts.enabled=false`.
+- The chart also generates the **session secret and Postgres password** once, in Secret `heimdall-secrets`, and keeps them across upgrades. To bring your own, set `hub.sessionSecret.existingSecret` or `postgres.auth.password`.
+- If you render with `helm template` (for example Argo CD), create these Secrets yourself and set `hub.secretKey.existingSecret` and `hub.sessionSecret.existingSecret`. Otherwise new values are generated on every render.
+- Containers run as non-root with a read-only root filesystem and no Linux capabilities.
+- To measure real host disk usage, set `agent.hostMounts.enabled=true` (or `-f deploy/helm/heimdall/values-host-mounts.yaml`). It mounts the host root read-only at `/host`. It is off by default because it exposes host files to the agent.
 - Use a different `agent.clusterId` for each cluster.
 
 The full list of chart values is in [configuration reference](../reference/configuration.md#helm-values).
@@ -149,7 +152,7 @@ The hub creates and migrates its schema on start. Put it behind a TLS reverse pr
 
 Open the public URL. A fresh hub sends you to `/setup`, which has five steps:
 
-1. **Admin.** Create the organization and the first admin account (email and password).
+1. **Admin.** Create the organization and the first admin account (email and password). Enter the hub's `HEIMDALL_BOOTSTRAP_TOKEN` as the setup token. This proves you operate the hub, so a stranger who reaches a fresh hub first cannot claim it. Only one first admin can be created.
 2. **Alerts.** Optionally configure notification channels: SMTP email, Slack webhook, Discord webhook, and SMS (Twilio-compatible account SID, auth token, from and to numbers). You can skip this step.
 3. **Agent.** Mint an agent token and copy the install snippet.
 4. **Remotes.** Optionally connect a GitHub organization and a GitLab project for security findings. You can add more later under **Remotes**.
@@ -170,6 +173,8 @@ The recommended way to add a host is the one-command installer the hub serves.
    ```
 
    Paste the `hdt_…` token when prompted.
+
+   The installer requires `https://` because it downloads binaries that run as root. On a trusted LAN with a plain-http hub, the command shown in the console adds `HEIMDALL_ALLOW_INSECURE=1`. To pin the binary independently of the hub, pass `EXPECTED_SHA256=<sha256>`.
 
 The installer:
 
@@ -224,7 +229,7 @@ In the console, the host should show a green dot under **Fleet → Servers**, wi
 
 ## Production checklist
 
-- [ ] `HEIMDALL_SESSION_SECRET` is unique and at least 32 characters
+- [ ] `HEIMDALL_SESSION_SECRET` is random (`openssl rand -hex 32`); Helm generates one for you
 - [ ] `HEIMDALL_SECRET_KEY` is set and **backed up** separately from database backups
 - [ ] `HEIMDALL_PUBLIC_URL` uses `https://` and matches the browser URL
 - [ ] `HEIMDALL_TRUST_PROXY` is set only if a reverse proxy you control sits in front

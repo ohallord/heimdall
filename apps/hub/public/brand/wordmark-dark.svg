@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 128" role="img" aria-label="Heimdall wordmark dark">
+  <title>Heimdall mark (dark)</title>
+  <rect width="520" height="128" fill="#0A1628"/>
+  <g transform="translate(16,8) scale(0.875)" fill="none">
+    <path d="M14 98 A50 50 0 0 1 114 98" stroke="#5B2C8A" stroke-width="8"/>
+    <path d="M26 98 A38 38 0 0 1 102 98" stroke="#1AA6A0" stroke-width="7"/>
+    <path d="M38 98 A26 26 0 0 1 90 98" stroke="#D4A017" stroke-width="6"/>
+    <path fill="#F3EDE0" d="M54 28 L74 28 L74 86 L54 86 Z"/>
+    <path fill="#F3EDE0" d="M50 28 L64 10 L78 28 Z"/>
+    <rect x="58" y="36" width="12" height="10" rx="1" fill="#0A1628"/>
+    <rect x="48" y="86" width="32" height="6" fill="#F3EDE0"/>
+  </g>
+  <text x="148" y="78" font-family="IBM Plex Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
+        font-size="48" font-weight="700" letter-spacing="0.12em" fill="#F3EDE0">HEIMDALL</text>
+  <rect x="148" y="90" width="320" height="3" fill="#1AA6A0"/>
+</svg>

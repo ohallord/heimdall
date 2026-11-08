@@ -1,5 +1,7 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
+import { setupClosed } from "@/lib/auth/setup-guard";
 import { requireSession } from "@/lib/auth/session";
 import { createAgentToken, setSetupStep } from "@/lib/db/store";
 import { buildInstallSnippets } from "@/lib/wizard/snippets";
@@ -14,6 +16,8 @@ function hubUrlFromRequest(request: Request): string {
 }
 
 async function postHandler(request: Request) {
+  const closed = await setupClosed();
+  if (closed) return closed;
   try {
     const session = await requireSession({
       permission: "setup:run",
@@ -41,11 +45,7 @@ async function postHandler(request: Request) {
       nextStep: "remotes",
     });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

@@ -17,12 +17,43 @@ function bodyCap(o: IngestGuardOptions): number {
   return Number.isFinite(n) && n > 0 ? n : o.maxBytes;
 }
 
-/** Bucket key: short hash of the presented token (never the raw token), else client IP. */
+const KNOWN = Symbol.for("heimdall.knownIngestTokens");
+const MAX_KNOWN = 10_000;
+type Holder = { [KNOWN]?: Set<string> };
+
+/** Tokens that have authenticated at least once (hash prefixes only). Shared across bundles. */
+function known(): Set<string> {
+  const g = globalThis as Holder;
+  return (g[KNOWN] ??= new Set());
+}
+
+function tokenTag(token: string): string {
+  return createHash("sha256").update(token).digest("hex").slice(0, 16);
+}
+
+/** Record a token that just authenticated, so it gets its own rate-limit bucket from now on. */
+export function rememberValidToken(token: string | null | undefined): void {
+  if (!token) return;
+  const set = known();
+  const tag = tokenTag(token);
+  if (set.has(tag)) return;
+  if (set.size >= MAX_KNOWN) set.delete(set.values().next().value as string);
+  set.add(tag);
+}
+
+export function forgetKnownTokens(): void {
+  known().clear();
+}
+
+/**
+ * Bucket key. A token that has authenticated before gets its own bucket. Anything else (no
+ * token, or one never seen to work) shares the per-client-IP bucket, so rotating random
+ * tokens cannot mint a fresh budget per request.
+ */
 export function ingestKey(request: Request, route: string): string {
   const token = extractBearerOrHeaderToken(request);
-  const who = token
-    ? `t:${createHash("sha256").update(token).digest("hex").slice(0, 16)}`
-    : `ip:${clientIp(request)}`;
+  const tag = token ? tokenTag(token) : null;
+  const who = tag && known().has(tag) ? `t:${tag}` : `ip:${clientIp(request)}`;
   return `${route}|${who}`;
 }
 

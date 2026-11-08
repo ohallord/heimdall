@@ -9,7 +9,7 @@ vi.mock("@/lib/auth/password", async (orig) => ({
   hashPassword: async () => "h",
 }));
 vi.mock("@/lib/db/store", () => ({
-  findUserByEmail: async (e: string) =>
+  findUserByLogin: async (e: string) =>
     e === "ada@example.com"
       ? { id: "u1", org_id: "o1", email: e, role: "member", mfa_enrolled: false, password_hash: "h" }
       : null,
@@ -49,5 +49,20 @@ describe("login rate limit", () => {
     expect((await POST(req("ada@example.com", "right"))).status).toBe(200);
     for (let i = 0; i < 2; i++) expect((await POST(req("ada@example.com", "bad"))).status).toBe(401);
     expect((await POST(req("ada@example.com", "right"))).status).toBe(200);
+  });
+});
+
+describe("login rate limit under a parallel burst", () => {
+  beforeEach(() => {
+    resetRateLimits();
+    process.env.HEIMDALL_RATE_LOGIN = "3/60";
+  });
+
+  it("counts every in-flight attempt, so a burst cannot bypass the budget", async () => {
+    const statuses = (
+      await Promise.all(Array.from({ length: 15 }, () => POST(req("ada@example.com", "wrong"))))
+    ).map((r) => r.status);
+    expect(statuses.filter((s) => s === 401)).toHaveLength(3);
+    expect(statuses.filter((s) => s === 429)).toHaveLength(12);
   });
 });

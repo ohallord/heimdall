@@ -57,16 +57,30 @@ export type BackupPayload = {
   }>;
 };
 
-function redactConfig(
+/** Keys whose values are credentials. Webhook URLs (Slack/Discord) embed their secret too. */
+const SECRET_KEY = /(token|pass(word)?|secret|api[-_]?key|auth|credential|private|^url$|webhook)/i;
+
+/** Deep redaction: any nested key that looks like a credential becomes "[redacted]". */
+export function redactConfig(
   config: Record<string, unknown>,
   includeSecrets: boolean,
 ): Record<string, unknown> {
   if (includeSecrets) return config;
-  const out = { ...config };
-  for (const key of ["token", "pass", "password", "authToken", "clientSecret"]) {
-    if (key in out) out[key] = "[redacted]";
-  }
-  return out;
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(
+        Object.entries(v as Record<string, unknown>).map(([k, x]) => [
+          k,
+          SECRET_KEY.test(k) && x !== null && x !== "" && typeof x !== "object" && typeof x !== "boolean"
+            ? "[redacted]"
+            : walk(x),
+        ]),
+      );
+    }
+    return v;
+  };
+  return walk(config) as Record<string, unknown>;
 }
 
 export async function buildOrgBackup(input: {

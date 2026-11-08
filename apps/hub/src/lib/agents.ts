@@ -51,7 +51,7 @@ function toRegistration(row: {
   };
 }
 
-/** @deprecated no-op kept for older unit tests that reset memory */
+/** @deprecated no-op kept for Phase 0 unit tests that reset memory */
 export function resetAgentsForTests(): void {
   // Persistent store is reset via resetDbForTests() in integration suites.
 }

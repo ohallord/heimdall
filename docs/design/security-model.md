@@ -37,9 +37,11 @@ Every token comparison hashes both sides with SHA-256 and compares in constant t
 
 ## Authentication and authorization
 
-- **Users.** bcrypt passwords. Login runs a dummy bcrypt compare for unknown emails, so response timing does not reveal which accounts exist. MFA uses TOTP, WebAuthn passkeys, or single-use recovery codes. Changing MFA factors requires a session that has already passed MFA (fixes F11).
-- **SSO.** OIDC discovery with an issuer match, PKCE S256, nonce, and ID token signature verification against the IdP JWKS (alg allowlist, `iss`/`aud`/`exp` checks). New users get `viewer`. Admins with MFA still verify TOTP after SSO.
-- **Sessions.** `httpOnly`, `SameSite=lax`. `Secure` is derived from `HEIMDALL_PUBLIC_URL` (override with `HEIMDALL_COOKIE_SECURE`). The hub refuses to start in production without a session secret of at least 32 characters.
+- **Users.** bcrypt passwords. Login runs a dummy bcrypt compare for unknown emails, so response timing does not reveal which accounts exist. MFA uses TOTP, WebAuthn passkeys, or single-use recovery codes. Changing MFA factors requires a session that has already passed MFA (fixes F11). Login and MFA attempts are counted before the check, so parallel bursts cannot exceed the limit; a TOTP code works once, and recovery codes are spent atomically.
+- **SSO.** OIDC discovery with an issuer match, PKCE S256, nonce, and ID token signature verification against the IdP JWKS (alg allowlist, `iss`/`aud`/`exp` checks). New users get `viewer`. An existing account is linked only when the IdP asserts `email_verified=true`, and an account already linked to another subject is never re-pointed. Admins with MFA still verify TOTP after SSO.
+- **Sessions.** `httpOnly`, `SameSite=lax`. `Secure` is derived from `HEIMDALL_PUBLIC_URL` (override with `HEIMDALL_COOKIE_SECURE`). The hub refuses to start in production without a session secret of at least 32 characters, or with one that has appeared in a published file. Sessions last 12 hours and are re-checked against the database on every request: logout (`session_version`), deletion and demotion take effect at once.
+- **First-run setup.** Creating the first admin requires the bootstrap token and succeeds once. Wizard routes refuse once setup is complete.
+- **Response headers.** CSP (`frame-ancestors 'none'`, `object-src 'none'`, `base-uri`/`form-action 'self'`), `X-Frame-Options: DENY`, `nosniff`, HSTS, Referrer-Policy, Permissions-Policy. Unexpected errors return `internal_error`; details stay in the server log.
 - **RBAC.** A fixed matrix of three roles (viewer, operator, admin) over nine permissions (`lib/rbac/permissions.ts`). Every session route calls `requireSession({ permission })`, and every query is scoped to the session's org.
 - **CSRF.** Mutating session routes require a same-origin `Origin` or `Sec-Fetch-Site`. Token-authenticated ingest routes are exempt because they never use cookies.
 - **Agents.** Per-agent secrets bound to one agent ID. A hostname cannot be rebound by someone holding a shared token (`409`). Revocation is immediate.
@@ -101,4 +103,6 @@ URLs are also checked when they are saved, so mistakes show up in the form.
 | Email lookup at login is global, not per org | Fine for a single tenant, not for multi-org SaaS | Deferred (F8) |
 | Agent payloads are validated ad hoc, not with Zod | Malformed input is rejected less uniformly | Partial |
 | No per-form CSRF tokens (origin check only) | Relies on browsers sending `Origin` or `Sec-Fetch-Site` | Accepted |
-| Compose defaults (session secret, Postgres password) are public | Unsafe if exposed beyond localhost | Documented; override for real use |
+| Without `HEIMDALL_TRUST_PROXY` the hub cannot see client IPs | Per-IP buckets (login, setup, unauthenticated ingest) are shared by all clients | Run behind a proxy you control and set it |
+| Sealed secrets carry no AAD | A database writer could swap two `enc:v1:` values between rows | Deferred (needs `v2` format + re-seal) |
+| WebAuthn is registration-only | Security keys cannot be used to sign in yet; enrol TOTP too | Deferred |

@@ -7,7 +7,7 @@ export type K8sStatusInput = Partial<K8sClusterMetric> | null | undefined;
  * Whether the agent is collecting Kubernetes health.
  * `enabled: false` is explicit (Compose / bare hosts).
  * Legacy samples without `enabled` that look empty+unreachable are treated as disabled
- * so a host never shows a false "API: down" after K8s was turned off.
+ * so homelab never shows a false "API: down" after K8s was turned off.
  */
 export function isK8sCollectionEnabled(k8s: K8sStatusInput): boolean {
   if (!k8s) return false;

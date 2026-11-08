@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 type UnifiState = {
   webhookPath: string;
@@ -25,8 +25,6 @@ type RuntimeState = {
 
 type RotateKind = "unifi" | "otel" | "runtime";
 
-const noopSubscribe = () => () => {};
-
 export function IntegrationsForm({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const [unifi, setUnifi] = useState<UnifiState | null>(null);
@@ -34,14 +32,12 @@ export function IntegrationsForm({ canWrite }: { canWrite: boolean }) {
   const [runtime, setRuntime] = useState<RuntimeState | null>(null);
   const [busy, setBusy] = useState<RotateKind | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Browser origin for copy-ready URLs; "" during server render.
-  const origin = useSyncExternalStore(
-    noopSubscribe,
-    () => window.location.origin,
-    () => "",
-  );
+  const [origin, setOrigin] = useState("");
 
   useEffect(() => {
+    // Browser-only origin for webhook URL hints.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- window is unavailable during SSR init
+    setOrigin(window.location.origin);
     void (async () => {
       try {
         const [u, o, r] = await Promise.all([

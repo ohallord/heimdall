@@ -43,8 +43,8 @@ go build -o bin/heimdall-agent ./cmd/agent
 
 - Conventional commits (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`).
 - Prefer small focused commits per subsystem.
-- Additive schema changes only (`IF NOT EXISTS`); the hub applies `db/schema.sql` on start.
-- See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full checklist.
+- Update Agent Store `discussion-log.md` at each phase boundary.
+- Health endpoint reports `phase` (currently `8`).
 
 ## Deploy docs
 

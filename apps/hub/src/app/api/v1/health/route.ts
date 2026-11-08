@@ -6,6 +6,7 @@ export async function GET() {
   return NextResponse.json({
     status: "ok",
     service: "heimdall-hub",
+    phase: 8,
     time: new Date().toISOString(),
   });
 }

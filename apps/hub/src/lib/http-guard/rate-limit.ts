@@ -19,7 +19,13 @@ export function presetFor(name: RateName): { max: number; windowMs: number } {
 
 type Bucket = { count: number; resetAt: number };
 const buckets = new Map<string, Bucket>();
+/** Hard cap so a flood of distinct keys (random tokens) cannot grow memory without bound. */
+const MAX_BUCKETS = 50_000;
 let lastSweep = 0;
+
+export function bucketCount(): number {
+  return buckets.size;
+}
 
 export function resetRateLimits(): void {
   buckets.clear();
@@ -38,6 +44,15 @@ export function limit(o: { key: string; max: number; windowMs: number }): {
   }
   let b = buckets.get(o.key);
   if (!b || b.resetAt <= now) {
+    if (!b && buckets.size >= MAX_BUCKETS) {
+      // Evict the oldest entries (Map keeps insertion order).
+      const drop = Math.ceil(MAX_BUCKETS / 10);
+      let i = 0;
+      for (const k of buckets.keys()) {
+        if (i++ >= drop) break;
+        buckets.delete(k);
+      }
+    }
     b = { count: 0, resetAt: now + o.windowMs };
     buckets.set(o.key, b);
   }

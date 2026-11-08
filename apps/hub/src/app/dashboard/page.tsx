@@ -612,7 +612,7 @@ export default async function DashboardPage({
         <ContainersTable
           containers={allContainers}
           showHost
-          emptyMessage="No container samples yet. Mount the Docker/Podman socket into the agent to enable container collection."
+          emptyMessage="No container samples yet. Mount the Docker/Podman socket into the agent to enable Phase 3 collection."
         />
       </section>
 

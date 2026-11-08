@@ -50,6 +50,7 @@ type HeartbeatResponse struct {
 type HealthResponse struct {
 	Status  string `json:"status"`
 	Service string `json:"service"`
+	Phase   int    `json:"phase"`
 }
 
 func NewClient(baseURL, token string) *Client {

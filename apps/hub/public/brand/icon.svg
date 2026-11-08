@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Heimdall app icon">
+  <title>Heimdall app icon</title>
+  <!-- Navy rounded square with full mark centered -->
+  <rect width="128" height="128" rx="28" fill="#0A1628"/>
+  <g fill="none" transform="translate(0 -4)">
+    <path d="M18 96 A46 46 0 0 1 110 96" stroke="#5B2C8A" stroke-width="7"/>
+    <path d="M30 96 A34 34 0 0 1 98 96" stroke="#1AA6A0" stroke-width="6"/>
+    <path d="M42 96 A22 22 0 0 1 86 96" stroke="#D4A017" stroke-width="5"/>
+    <path fill="#F3EDE0" d="M56 32 L72 32 L72 84 L56 84 Z"/>
+    <path fill="#F3EDE0" d="M52 32 L64 16 L76 32 Z"/>
+    <rect x="59" y="40" width="10" height="8" rx="1" fill="#0A1628"/>
+    <rect x="50" y="84" width="28" height="5" fill="#F3EDE0"/>
+  </g>
+</svg>

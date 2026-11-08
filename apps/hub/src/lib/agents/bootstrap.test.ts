@@ -85,7 +85,7 @@ describe("bootstrap token modes", () => {
   });
 
   it("flags the dev default and short tokens as weak", async () => {
-    process.env.HEIMDALL_BOOTSTRAP_TOKEN = "heimdall-dev-token";
+    process.env.HEIMDALL_BOOTSTRAP_TOKEN = "CHANGE_ME_BOOTSTRAP_TOKEN";
     expect((await bootstrapStatus()).weak).toBe(true);
     resetBootstrapCache();
     process.env.HEIMDALL_BOOTSTRAP_TOKEN = "short-token";

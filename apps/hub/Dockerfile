@@ -17,10 +17,10 @@ RUN mkdir -p public
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Agent binaries + host installers served at /downloads and /install.sh.
+# Phase 31: agent binaries + host installers served at /downloads and /install.sh.
 # Named build contexts (compose additional_contexts / buildx --build-context):
 #   agent=apps/agent  scripts=scripts  deploy=deploy
-FROM golang:1.22-bookworm AS dist
+FROM golang:1.26-bookworm AS dist
 ARG AGENT_VERSION=dev
 WORKDIR /src
 COPY --from=agent . apps/agent

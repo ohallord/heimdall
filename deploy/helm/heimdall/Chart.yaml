@@ -1,6 +1,6 @@
 apiVersion: v2
 name: heimdall
-description: Self-hosted monitoring hub and agents for hosts, containers and Kubernetes
+description: Heimdall self-hosted monitoring hub and agents (Phase 4 — single-cluster K8s health)
 type: application
 version: 0.0.1
 appVersion: "0.0.1"

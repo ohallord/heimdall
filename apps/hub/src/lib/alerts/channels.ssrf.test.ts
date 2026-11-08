@@ -62,3 +62,14 @@ describe("outbound SSRF guard on admin-configured URLs", () => {
     }
   });
 });
+
+describe("SmtpChannel send-time SSRF guard", () => {
+  it("refuses to connect to a private SMTP host that is not allowlisted", async () => {
+    const { SmtpChannel } = await import("./channels");
+    delete process.env.HEIMDALL_ALLOW_PRIVATE_HOSTS;
+    const ch = new SmtpChannel({ host: "169.254.169.254", port: 80, from: "a@x.io", to: "b@x.io" } as never);
+    await expect(
+      ch.send({ title: "t", severity: "critical", message: "m" } as never),
+    ).rejects.toThrow(/blocked_host/);
+  });
+});

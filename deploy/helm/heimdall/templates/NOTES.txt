@@ -1,8 +1,10 @@
-Heimdall chart installed.
+Heimdall Phase 8 chart installed.
 
 Hub service: {{ include "heimdall.name" . }}-hub:{{ .Values.hub.service.port }}
 Bootstrap token: set via values.hub.env.HEIMDALL_BOOTSTRAP_TOKEN
 Public URL (OIDC/WebAuthn): values.hub.env.HEIMDALL_PUBLIC_URL
+Session secret{{ if .Values.postgres.enabled }} + Postgres password{{ end }}: Secret {{ include "heimdall.secretsName" . }} unless existingSecret is set
+(generated once, kept on uninstall; Postgres rotation: docs/runbooks/postgres-password.md).
 
 In-cluster agent uses ServiceAccount {{ include "heimdall.name" . }}-agent with
 ClusterRole read access to nodes, pods, events, pods/log, and deployments. Cluster id:

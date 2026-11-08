@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { BlockedHostError, guardedFetch } from "@/lib/http-guard/safe-fetch";
+import { assertPublicUrl, BlockedHostError, guardedFetch } from "@/lib/http-guard/safe-fetch";
 import {
   formatAlertBody,
   formatAlertHtml,
@@ -55,15 +55,25 @@ export type SmsConfig = {
   apiBaseUrl?: string;
 };
 
+/** http:// stand-in URL so SMTP hosts go through the same assertPublicUrl check as webhooks. */
+export function smtpProbeUrl(host: string, port?: number): string {
+  const h = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  return `http://${h}${port ? `:${port}` : ""}/`;
+}
+
 export class SmtpChannel implements AlertChannel {
   kind = "smtp";
   constructor(private readonly config: SmtpConfig) {}
 
   async send(payload: AlertPayload): Promise<ChannelSendResult> {
+    // Same SSRF rule as webhooks: resolve once, refuse private targets unless allowlisted,
+    // and connect to the validated IP (TLS still verifies the configured hostname).
+    const { addresses } = await assertPublicUrl(smtpProbeUrl(this.config.host, this.config.port));
     const transport = nodemailer.createTransport({
-      host: this.config.host,
+      host: addresses[0],
       port: this.config.port,
       secure: this.config.secure ?? false,
+      tls: { servername: this.config.host },
       connectionTimeout: 3_000,
       greetingTimeout: 3_000,
       socketTimeout: 5_000,

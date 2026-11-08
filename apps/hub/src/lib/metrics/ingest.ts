@@ -514,7 +514,7 @@ export async function ingestAgentMetrics(
   }
 
   await ensureHostMetricRules(agent.org_id);
-  // Throttle-delete samples older than org retention.
+  // Phase 11: throttle-delete samples older than org retention.
   void maybePurgeOrgMetrics(agent.org_id).catch(() => undefined);
   const rules = await listAlertRules(agent.org_id);
   const channels = await listAlertChannels(agent.org_id);
@@ -528,7 +528,7 @@ export async function ingestAgentMetrics(
   });
 
   let alertsFired = 0;
-  // Track which alert identities are still breaching vs. seen healthy.
+  // Phase 26: track which alert identities are still breaching vs. seen healthy.
   const breaching = new Set<string>();
   const healthy = new Set<string>();
   for (const sample of thresholdSamples) {
@@ -790,7 +790,7 @@ function k8sRowEnabled(row: K8sLatestRow): boolean {
   }
 }
 
-/** Resolve K8s snapshot for the org's active cluster (multi-cluster). */
+/** Resolve K8s snapshot for the org's active cluster (Phase 8 multi-cluster). */
 export async function getActiveClusterK8s(
   orgId: string,
   preferredClusterId?: string,

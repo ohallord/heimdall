@@ -1,0 +1,12 @@
+# Snapshot gitleaks config. Allowlist ONLY known synthetic fixtures/tests.
+# Real secrets must never be added here — fix the content instead.
+title = "heimdall-public-snapshot"
+
+[allowlist]
+description = "Synthetic OIDC fixture + intentional redact/vitest test strings"
+paths = [
+  '''apps/hub/src/lib/oidc/fixtures/.*''',
+  '''apps/hub/src/lib/logs/redact\.test\.ts''',
+  '''apps/hub/src/lib/metrics/retention\.test\.ts''',
+  '''apps/hub/vitest\.config\.ts''',
+]

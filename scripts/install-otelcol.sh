@@ -92,6 +92,32 @@ render_config() {
   printf '%s\n' "$content"
 }
 
+# The unit runs as this unprivileged user (deploy/systemd/heimdall-otelcol.service). journald needs
+# systemd-journal (set in the unit); /var/log files are usually root:adm 0640, so join adm when the
+# group exists (a SupplementaryGroups= entry for a missing group would stop the unit starting).
+OTEL_USER=heimdall-otel
+ensure_otel_user() {
+  if dry; then
+    echo "+ ensure system user ${OTEL_USER} (no login shell); add to group adm when present"
+    return 0
+  fi
+  if ! getent group "$OTEL_USER" >/dev/null 2>&1; then
+    if command -v groupadd >/dev/null 2>&1; then groupadd --system "$OTEL_USER"
+    else echo "warning: groupadd not found; create group ${OTEL_USER} manually" >&2; fi
+  fi
+  if ! getent passwd "$OTEL_USER" >/dev/null 2>&1; then
+    if command -v useradd >/dev/null 2>&1; then
+      useradd --system --gid "$OTEL_USER" --no-create-home --home-dir /nonexistent \
+        --shell /usr/sbin/nologin --comment "Heimdall OpenTelemetry Collector" "$OTEL_USER"
+    else
+      echo "warning: useradd not found; create user ${OTEL_USER} manually" >&2
+    fi
+  fi
+  if getent group adm >/dev/null 2>&1 && command -v usermod >/dev/null 2>&1; then
+    usermod -aG adm "$OTEL_USER"
+  fi
+}
+
 render_env() {
   echo "HEIMDALL_OTLP_ENDPOINT=${HUB_URL}"
   echo "HEIMDALL_OTEL_TOKEN=${OTEL_TOKEN}"
@@ -158,6 +184,7 @@ do_install() {
   fi
 
   # Everything below writes; nothing above has touched the target root.
+  ensure_otel_user
   say "Install ${BIN_DST}"
   run install -d -m 0755 "${DESTDIR}${INSTALL_DIR}"
   run install -m 0755 "$src_bin" "${DESTDIR}${BIN_DST}"

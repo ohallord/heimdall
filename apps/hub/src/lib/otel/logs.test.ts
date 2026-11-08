@@ -79,7 +79,7 @@ describe("otel logs ingest", () => {
   });
 
   it("unwraps journald map bodies into MESSAGE and unit source", () => {
-    // Shape the otelcol-contrib journald receiver actually sends (seen on a real host).
+    // Shape the otelcol-contrib journald receiver actually sends (seen on homelab).
     const kv = (key: string, v: string) => ({ key, value: { stringValue: v } });
     const lines = parseOtlpLogsJson({
       resourceLogs: [
@@ -94,7 +94,7 @@ describe("otel logs ingest", () => {
                     kvlistValue: {
                       values: [
                         kv("__CURSOR", "s=abc;i=1"),
-                        kv("_HOSTNAME", "host01"),
+                        kv("_HOSTNAME", "homelab"),
                         kv("PRIORITY", "6"),
                         kv("_SYSTEMD_UNIT", "ssh.service"),
                         kv("SYSLOG_IDENTIFIER", "sshd"),

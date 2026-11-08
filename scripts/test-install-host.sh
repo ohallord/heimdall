@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests install-host.sh (the `curl <hub>/install.sh | sudo bash` bootstrapper) without root or
+# Phase 31: install-host.sh (the `curl <hub>/install.sh | sudo bash` bootstrapper) without root or
 # network. build-dist.sh (FAKE_AGENT=1) produces the hub dist dir; it is served via file://.
 # systemctl/useradd/groupadd/getent/uname are stubbed and everything installs under DESTDIR.
 set -euo pipefail
@@ -45,8 +45,9 @@ chmod +x "$T/bin/"* "$T/otelcol"
 
 host() { # root, then extra env, then args
   local root="$1"; shift
+  # file:// is not https, so the sandbox hub needs the insecure opt-in.
   env PATH="$T/bin:$PATH" DESTDIR="$root" HUB_URL="file://$T/hub" HEIMDALL_TTY=/nonexistent \
-    HOSTNAME_VALUE=lab-01 "$@"
+    HEIMDALL_ALLOW_INSECURE=1 HOSTNAME_VALUE=lab-01 "$@"
 }
 
 # --- install from TOKEN_FILE (x86_64 → amd64) ---
@@ -61,6 +62,7 @@ U="$R/etc/systemd/system/heimdall-agent.service"
 grep -qx "HEIMDALL_BOOTSTRAP_TOKEN=$TOKEN" "$E" || fail "token missing from agent.env"
 grep -qx "HEIMDALL_HUB_URL=file://$T/hub" "$E" || fail "hub url missing from agent.env"
 grep -qx "HEIMDALL_HOSTNAME=lab-01" "$E" || fail "hostname not passed through"
+grep -qx "HEIMDALL_ALLOW_INSECURE=1" "$E" || fail "insecure opt-in not carried into agent.env (agent would refuse the hub)"
 cmp -s "$U" deploy/systemd/heimdall-agent.service || fail "agent unit not installed"
 [[ -d "$R/var/lib/heimdall" ]] || fail "state dir not created"
 grep -qx "systemctl enable heimdall-agent.service" "$T/argv.log" || fail "unit not enabled"
@@ -105,6 +107,43 @@ if host "$T/bad" TOKEN="$TOKEN" HUB_URL="file://$T/badhub" bash ./scripts/instal
 fi
 grep -qi 'checksum' "$T/out" || fail "mismatch not explained"
 [[ -e "$T/bad" ]] && fail "mismatch installed something"
+
+# --- non-https hub refused without HEIMDALL_ALLOW_INSECURE=1 (loopback http allowed) ---
+for u in "http://203.0.113.10:43123" "http://heimdall.example.com" "file://$T/hub" "http://127.evil.com"; do
+  set +e
+  host "$T/insec" HEIMDALL_ALLOW_INSECURE=0 HUB_URL="$u" TOKEN="$TOKEN" bash ./scripts/install-host.sh >"$T/out" 2>&1; rc=$?
+  set -e
+  [[ $rc -eq 2 ]] || fail "non-https $u exit $rc != 2"
+  grep -q 'HEIMDALL_ALLOW_INSECURE=1' "$T/out" || fail "non-https refusal for $u does not name the opt-in"
+  [[ -e "$T/insec" ]] && fail "non-https $u installed something"
+done
+for u in "http://127.0.0.1:9" "http://localhost:9" "http://[::1]:9"; do
+  host "$T/lo" HEIMDALL_ALLOW_INSECURE=0 HUB_URL="$u" TOKEN="$TOKEN" bash ./scripts/install-host.sh >"$T/out" 2>&1 || true
+  grep -q 'refusing non-https' "$T/out" && fail "loopback $u refused"
+  grep -q 'cannot download' "$T/out" || fail "loopback $u did not reach the download step: $(cat "$T/out")"
+done
+
+# --- EXPECTED_SHA256 pins the manifest ---
+SUMS_SHA="$(if command -v sha256sum >/dev/null; then sha256sum "$M"; else shasum -a 256 "$M"; fi | awk '{print $1}')"
+if host "$T/pinbad" TOKEN="$TOKEN" EXPECTED_SHA256=0000 bash ./scripts/install-host.sh >"$T/out" 2>&1; then
+  fail "EXPECTED_SHA256 mismatch should fail"
+fi
+grep -q 'EXPECTED_SHA256' "$T/out" || fail "pin mismatch not explained"
+[[ -e "$T/pinbad" ]] && fail "pin mismatch installed something"
+host "$T/pinok" TOKEN="$TOKEN" EXPECTED_SHA256="$SUMS_SHA" bash ./scripts/install-host.sh >"$T/out" 2>&1 \
+  || { cat "$T/out" >&2; fail "matching EXPECTED_SHA256 failed"; }
+grep -q 'matches EXPECTED_SHA256' "$T/out" || fail "pin match not reported"
+
+# --- install-agent.sh applies the agent's hub URL rule ---
+set +e
+env PATH="$T/bin:$PATH" DESTDIR="$T/ia" HUB_URL=http://203.0.113.10:43123 TOKEN="$TOKEN" DRY_RUN=1 \
+  HEIMDALL_ALLOW_INSECURE=0 bash ./scripts/install-agent.sh >"$T/out" 2>&1; rc=$?
+set -e
+[[ $rc -eq 2 ]] || fail "install-agent.sh accepted public-IP http without opt-in (rc=$rc)"
+for u in http://203.0.113.10:43123 http://203.0.113.20:43123 http://heimdall.lan:43123 http://heimdall-hub:43123 http://heimdall-hub.heimdall.svc.cluster.local:43123 https://h.example.com; do
+  env PATH="$T/bin:$PATH" DESTDIR="$T/ia" HUB_URL="$u" TOKEN="$TOKEN" DRY_RUN=1 HEIMDALL_ALLOW_INSECURE=0 \
+    bash ./scripts/install-agent.sh >"$T/out" 2>&1 || { cat "$T/out" >&2; fail "install-agent.sh refused $u"; }
+done
 
 # --- no token and no tty: exit 2 ---
 set +e

@@ -3,7 +3,7 @@ import { hubUrlFor, readInstallScript, renderInstallScript } from "@/lib/host-di
 
 export const dynamic = "force-dynamic";
 
-/** `curl -fsSL <hub>/install.sh | sudo bash` — the host bootstrapper, HUB_URL baked in. */
+/** `curl -fsSL <hub>/install.sh | sudo bash` — the Phase 31 host bootstrapper, HUB_URL baked in. */
 export async function GET(request: Request) {
   const limited = guardRate(request, { name: "INGEST", route: "install.sh" });
   if (limited) return limited;

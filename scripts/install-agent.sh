@@ -15,6 +15,8 @@
 #   CLUSTER_ID       HEIMDALL_CLUSTER_ID (default: default)
 #   ENABLE_K8S       HEIMDALL_ENABLE_K8S (default: false)
 #   DOCKER=0         Do not add user heimdall to the docker group (default: add it when the group exists)
+#   HEIMDALL_ALLOW_INSECURE=1  Accept a plain-http HUB_URL on a routable host (written to ENV_FILE;
+#                    https is required otherwise, except loopback or a single-label/*.svc name)
 #   DRY_RUN=1        Print actions without writing
 #   DESTDIR          Root prefix for every written path (tests)
 #   --uninstall      Stop + disable the unit; remove binary, unit, env file (PURGE=1 also state dir)
@@ -93,6 +95,36 @@ fi
 
 HUB_URL="${HUB_URL%/}"
 
+# Same rule the agent enforces (apps/agent/internal/config/huburl.go): https, or plain http only on
+# loopback / a single-label or *.svc in-cluster name / a private-network address or LAN name
+# (the agent logs a warning for those), or with HEIMDALL_ALLOW_INSECURE=1. Failing
+# here beats a unit that crash-loops on "refusing plain-http hub URL".
+hub_url_secure() {
+  local rest host
+  case "$1" in https://*) return 0 ;; http://*) ;; *) return 1 ;; esac
+  rest="${1#http://}"; rest="${rest%%/*}"; rest="${rest##*@}"
+  case "$rest" in "[::1]"|"[::1]:"*) return 0 ;; esac
+  host="${rest%%:*}"
+  [[ "$host" == localhost || "$host" =~ ^127\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 0
+  # RFC 1918, CGNAT (tailnets), IPv6 ULA, LAN-only names.
+  [[ "$host" =~ ^10\. || "$host" =~ ^192\.168\. || "$host" =~ ^172\.(1[6-9]|2[0-9]|3[01])\. ]] && return 0
+  [[ "$host" =~ ^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\. ]] && return 0
+  [[ "$rest" =~ ^\[f[cd][0-9a-fA-F]*: ]] && return 0
+  [[ "$host" == *.lan || "$host" == *.local || "$host" == *.home.arpa || "$host" == *.internal ]] && return 0
+  [[ "$host" =~ ^[0-9.]+$ ]] && return 1
+  [[ "$host" != *.* || "$host" == *.svc || "$host" == *.svc.cluster.local ]]
+}
+ALLOW_INSECURE=0
+case "${HEIMDALL_ALLOW_INSECURE:-0}" in 1|true|yes|on) ALLOW_INSECURE=1 ;; esac
+if ! hub_url_secure "$HUB_URL"; then
+  if [[ "$ALLOW_INSECURE" != "1" ]]; then
+    echo "error: refusing non-https HUB_URL ${HUB_URL}: the agent token would cross the network unencrypted." >&2
+    echo "       Use https, or on a trusted LAN set HEIMDALL_ALLOW_INSECURE=1 (persisted to ${ENV_FILE})." >&2
+    exit 2
+  fi
+  echo "warning: ${HUB_URL} is not https (HEIMDALL_ALLOW_INSECURE=1)" >&2
+fi
+
 resolve_binary() {
   if [[ -n "${BINARY:-}" && -x "$BINARY" ]]; then
     echo "$BINARY"
@@ -162,6 +194,9 @@ HEIMDALL_CLUSTER_ID=${CLUSTER_ID}
 HEIMDALL_ENABLE_K8S=${ENABLE_K8S}
 EOF
 )
+  if [[ "$ALLOW_INSECURE" == "1" ]]; then
+    content+=$'\nHEIMDALL_ALLOW_INSECURE=1'
+  fi
   if [[ "$DRY_RUN" == "1" ]]; then
     echo "+ write ${ENV_FILE}"
     echo "$content" | sed -e "s/^\(HEIMDALL_BOOTSTRAP_TOKEN=\).*/\1***/" -e "s/^/  /"

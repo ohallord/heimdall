@@ -1,5 +1,6 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import {
@@ -47,11 +48,7 @@ export async function GET() {
     });
     return NextResponse.json({ prefs: serialize(prefs) });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 
@@ -69,11 +66,7 @@ async function putHandler(request: Request) {
     });
     return NextResponse.json({ prefs: serialize(prefs) });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

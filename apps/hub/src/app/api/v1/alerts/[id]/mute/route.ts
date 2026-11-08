@@ -1,5 +1,6 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
 import { isMutePreset } from "@/lib/alerts/fingerprint";
 import { requireSession } from "@/lib/auth/session";
@@ -35,11 +36,7 @@ async function postHandler(
     }
     return NextResponse.json({ event: serializeAlertEvent(event) });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

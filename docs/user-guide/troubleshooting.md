@@ -49,7 +49,7 @@ It still authenticates with a shared token instead of its own secret. Restart or
 Remove it from `HEIMDALL_WATCH_MOUNTS`. The default `/,/boot,/var` assumes those are separate mounts. Containers often lack `/boot`.
 
 ### Disk usage in Kubernetes shows the container overlay, not the host
-Enable host mounts: `agent.hostMounts.enabled=true` (the default). The agent then watches `/host` and `/host/var`.
+Enable host mounts: `agent.hostMounts.enabled=true` (off by default; `values-host-mounts.yaml` turns it on). The agent then watches `/host` and `/host/var`.
 
 ### Kubernetes section is empty
 - The agent needs `HEIMDALL_ENABLE_K8S=true` (the Helm agent has it on).
@@ -90,7 +90,10 @@ Register exactly `<HEIMDALL_PUBLIC_URL>/api/v1/auth/oidc/callback` with the IdP.
 
 | Message | Fix |
 | --- | --- |
-| `HEIMDALL_SESSION_SECRET must be set to at least 32 characters in production` | Set a 32+ character secret |
+| `HEIMDALL_SESSION_SECRET must be set to at least 32 characters in production` | Set a random secret: `openssl rand -hex 32` |
+| `HEIMDALL_SESSION_SECRET is a published example value` | The value came from a published file. Generate a new one with `openssl rand -hex 32` |
+| `refusing plain-http hub URL` (agent) or `refusing non-https HUB_URL` (installer) | Serve the hub over https, or on a trusted network set `HEIMDALL_ALLOW_INSECURE=1` |
+| Setup wizard: `setup token does not match` | Enter the hub's `HEIMDALL_BOOTSTRAP_TOKEN` |
 | `HEIMDALL_SECRET_KEY is required` | Set it (`openssl rand -hex 32`). Helm creates one unless you render with `helm template` |
 | `set HEIMDALL_BOOTSTRAP_TOKEN in .env` (Compose) | Add it to `deploy/docker/.env` |
 | Helm: `Set hub.env.HEIMDALL_BOOTSTRAP_TOKEN …` | Pass a token or `hub.existingSecret.name` on fresh installs |

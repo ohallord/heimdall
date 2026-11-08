@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { getSession } from "@/lib/auth/session";
 import {
   buildAuthorizationUrl,
@@ -13,6 +14,10 @@ export const dynamic = "force-dynamic";
 function publicBase(request: Request): string {
   const env = process.env.HEIMDALL_PUBLIC_URL?.replace(/\/$/, "");
   if (env) return env;
+  // The Host header is client-controlled; in production the redirect_uri must come from config.
+  if (process.env.NODE_ENV === "production") {
+    throw Object.assign(new Error("set HEIMDALL_PUBLIC_URL to use single sign-on"), { status: 503 });
+  }
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
@@ -53,10 +58,6 @@ export async function GET(request: Request) {
     });
     return NextResponse.redirect(authUrl);
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "oidc start failed" },
-      { status },
-    );
+    return apiError(err);
   }
 }

@@ -2,9 +2,9 @@ import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
-import { consumeRecoveryCode, findUserById } from "@/lib/db/store";
-import { verifyTotp } from "@/lib/mfa/totp";
-import { clearLimit, isBlocked, limit, presetFor, tooMany } from "@/lib/http-guard/rate-limit";
+import { claimTotpStep, consumeRecoveryCode, findUserById } from "@/lib/db/store";
+import { totpStep } from "@/lib/mfa/totp";
+import { clearLimit, limit, presetFor, tooMany } from "@/lib/http-guard/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +26,9 @@ async function postHandler(request: Request) {
 
   const rl = presetFor("MFA");
   const rlKey = `mfa|${session.userId}`;
-  const gate = isBlocked({ key: rlKey, max: rl.max });
-  if (gate.blocked) return tooMany(gate.retryAfter);
+  // Count before verifying: a burst of parallel guesses all lands in the bucket.
+  const hit = limit({ key: rlKey, ...rl });
+  if (!hit.allowed) return tooMany(hit.retryAfter);
 
   const user = await findUserById(session.userId);
   if (!user) {
@@ -42,13 +43,14 @@ async function postHandler(request: Request) {
         { status: 400 },
       );
     }
-    ok = verifyTotp(user.totp_secret, body.data.code);
+    const step = totpStep(user.totp_secret, body.data.code);
+    // A code is good for one sign-in: reject a replay of this step or an older one.
+    ok = step !== null && (await claimTotpStep(user.id, step));
   } else {
     ok = await consumeRecoveryCode(user.id, body.data.code);
   }
 
   if (!ok) {
-    limit({ key: rlKey, ...rl });
     return NextResponse.json({ error: "invalid code" }, { status: 401 });
   }
 

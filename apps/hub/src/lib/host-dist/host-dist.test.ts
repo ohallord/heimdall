@@ -120,3 +120,12 @@ describe("/install.sh", () => {
     expect(renderInstallScript(SCRIPT, null)).toContain("__HEIMDALL_HUB_URL__");
   });
 });
+
+describe("install commands on a plain-http hub", () => {
+  it("carry HEIMDALL_ALLOW_INSECURE=1 so the installer does not refuse the LAN hub", async () => {
+    const { insecureOptIn } = await import("./index");
+    expect(insecureOptIn("http://192.168.5.8:43123")).toBe("HEIMDALL_ALLOW_INSECURE=1 ");
+    expect(insecureOptIn("https://heimdall.example.com")).toBe("");
+    expect(insecureOptIn("http://127.0.0.1:43123")).toBe("");
+  });
+});

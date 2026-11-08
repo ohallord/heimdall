@@ -37,7 +37,7 @@ describe("install snippets", () => {
     expect(snippets.kubernetes).toContain("pods/log");
   });
 
-  it("leads the systemd tab with the one-command hub install", () => {
+  it("leads the systemd tab with the one-command hub install (Phase 31)", () => {
     for (const hubUrl of ["http://127.0.0.1:43123/", "https://heimdall.example.com"]) {
       const s = buildInstallSnippets({ hubUrl, token: "hdt_x" }).systemd;
       const hub = hubUrl.replace(/\/$/, "");

@@ -43,6 +43,7 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
   const [smsTo, setSmsTo] = useState("");
   const [smsApiBase, setSmsApiBase] = useState("");
 
+  const [setupToken, setSetupToken] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const [snippets, setSnippets] = useState<Snippets | null>(null);
   const [snippetTab, setSnippetTab] = useState<keyof Snippets>("docker");
@@ -53,6 +54,7 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
   const [gitlabToken, setGitlabToken] = useState("");
 
   const [totpUri, setTotpUri] = useState<string | null>(null);
+  const [, setTotpSecret] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
 
@@ -93,6 +95,7 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
         adminName,
         email,
         password,
+        setupToken,
       });
       setStep("channels");
     } catch (err) {
@@ -182,6 +185,7 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
     setError(null);
     try {
       const data = await post("/api/v1/auth/mfa/totp/enroll", { action: "start" });
+      setTotpSecret(data.secret);
       setTotpUri(data.uri);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed");
@@ -281,6 +285,14 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
             value={password}
             onChange={setPassword}
             placeholder="At least 12 characters"
+            required
+          />
+          <Field
+            label="Setup token (the hub's HEIMDALL_BOOTSTRAP_TOKEN)"
+            type="password"
+            value={setupToken}
+            onChange={setSetupToken}
+            placeholder="Proves you operate this hub"
             required
           />
           <button
@@ -444,7 +456,7 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
       {step === "remotes" ? (
         <form onSubmit={submitRemotes} className="space-y-4 border border-border bg-surface p-5">
           <p className="text-sm text-muted">
-            Optional remotes: GitHub org token (Dependabot / advisories)
+            Optional Phase 6 remotes: GitHub org token (Dependabot / advisories)
             and GitLab project token (GraphQL vulnerabilities). Skip if you will
             only ingest Trivy/OSV reports.
           </p>

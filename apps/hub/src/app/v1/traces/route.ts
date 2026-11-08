@@ -9,7 +9,7 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * OTLP/HTTP JSON traces receiver (ExportTraceServiceRequest).
+ * OTLP/HTTP JSON traces receiver (ExportTraceServiceRequest), Phase 29.
  * Collectors must use encoding: json and Authorization: Bearer <otel token>.
  */
 export async function POST(request: Request) {
@@ -63,9 +63,6 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("[heimdall] otlp traces failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }

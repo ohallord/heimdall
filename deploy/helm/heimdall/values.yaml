@@ -16,6 +16,14 @@ hub:
   secretKey:
     existingSecret: ""
     key: key
+  # Session cookie signing key (HEIMDALL_SESSION_SECRET). No default is shipped.
+  # Default: the chart generates <release>-secrets (key session-secret) once and keeps it across upgrades.
+  # Or bring your own Secret here, or set env.HEIMDALL_SESSION_SECRET (ends up in release values).
+  sessionSecret:
+    existingSecret: ""
+    key: session-secret
+  # Container securityContext overrides (merged over the restricted defaults in _helpers.tpl).
+  containerSecurityContext: {}
   # Extra hub environment variables, e.g. HEIMDALL_ALLOW_PRIVATE_HOSTS, HEIMDALL_TRUST_PROXY,
   # HEIMDALL_RATE_LOGIN, HEIMDALL_LEGACY_TOKENS. See docs/deploy.md.
   extraEnv: {}
@@ -26,7 +34,8 @@ hub:
     # REQUIRED: set with --set-string hub.env.HEIMDALL_BOOTSTRAP_TOKEN=$(openssl rand -hex 32)
     # or reference a Secret via hub.existingSecret below. No default is shipped.
     HEIMDALL_BOOTSTRAP_TOKEN: ""
-    HEIMDALL_SESSION_SECRET: heimdall-dev-session-secret-change-me!!
+    # Empty = chart-generated (see hub.sessionSecret). The old placeholder value is ignored.
+    HEIMDALL_SESSION_SECRET: ""
     HEIMDALL_PUBLIC_URL: http://heimdall-hub:43123
     HEIMDALL_RP_ID: localhost
     HEIMDALL_ORIGIN: http://127.0.0.1:43123
@@ -41,6 +50,7 @@ agent:
   enableK8s: "true"
   rbac:
     create: true
+  containerSecurityContext: {}
   # Per-agent secret persistence. Without a persistent volume every restart loses the
   # secret and the hub answers 409 hostname_in_use until the agent is re-enrolled.
   state:
@@ -56,9 +66,10 @@ agent:
   # Host disk watch for single-node / k3s labs: bind host / at /host (readOnly)
   # and watch /host,/host/var. /boot is intentionally omitted (often a small
   # ESP; presence alerts are noisy in-cluster). Disable on multi-tenant clusters
-  # that disallow hostPath.
+  # that disallow hostPath. Off by default (hostPath of /); the single-node lab overlay
+  # values-host-mounts.yaml (passed by scripts/deploy-cluster.sh) turns it on.
   hostMounts:
-    enabled: true
+    enabled: false
     # Joined to HEIMDALL_WATCH_MOUNTS with commas. Prefer a YAML list — Helm
     # --set/--set-string still split on commas inside a single string value.
     # Override: -f values, or --set agent.hostMounts.watchMounts[0]=/host …
@@ -79,8 +90,14 @@ postgres:
     storageClass: ""
   auth:
     username: heimdall
-    password: heimdall
+    # Empty = chart-generated once into <release>-secrets (key postgres-password). An install that
+    # already has the Postgres Deployment/PVC keeps the legacy "heimdall" its volume was initialised
+    # with. Rotate: docs/runbooks/postgres-password.md. Must be URL-safe (used in DATABASE_URL).
+    password: ""
     database: heimdall
+    # Pre-created Secret holding the password (wins over password).
+    existingSecret: ""
+    secretKey: password
 
 # OpenTelemetry Collector shipping node metrics (+ container logs) to the hub's /v1/metrics, /v1/logs.
 # Mint the ingest token in Settings → Integrations → OTLP, then either set existingSecret or token.
@@ -103,10 +120,18 @@ otel:
     logs: true
     # Receive app OTLP traces on 4317/4318 via a node-local Service (daemonset only).
     traces: true
+    # Restrict OTLP 4317/4318 ingress to in-cluster pods (see templates/otel-collector.yaml).
+    networkPolicy:
+      enabled: true
+      # Limit to these namespaces (empty = all namespaces in the cluster).
+      namespaces: []
+      # Extra NetworkPolicyPeer entries, e.g. [{ipBlock: {cidr: 203.0.113.10/24}}] for hostNetwork apps.
+      extraFrom: []
+    containerSecurityContext: {}
     resources:
       requests: {cpu: 50m, memory: 128Mi}
       limits: {memory: 256Mi}
-  # eBPF auto-instrumentation (Grafana Beyla) for apps with no OTel SDK
+  # Phase 33: eBPF auto-instrumentation (Grafana Beyla) for apps with no OTel SDK
   # (Plex, Jellyfin, Emby, Syncthing...). Needs kernel >= 5.8 with BTF and a privileged
   # hostPID DaemonSet. Requires otel.collector.enabled + traces (daemonset mode).
   beyla:

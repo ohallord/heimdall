@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Heimdall mark on light">
+  <title>Heimdall mark (light)</title>
+  <!-- Same geometry as master; intended for cream/light UI chrome -->
+  <g fill="none">
+    <path d="M14 98 A50 50 0 0 1 114 98" stroke="#5B2C8A" stroke-width="8"/>
+    <path d="M26 98 A38 38 0 0 1 102 98" stroke="#1AA6A0" stroke-width="7"/>
+    <path d="M38 98 A26 26 0 0 1 90 98" stroke="#D4A017" stroke-width="6"/>
+    <path fill="#0A1628" d="M54 28 L74 28 L74 86 L54 86 Z"/>
+    <path fill="#0A1628" d="M50 28 L64 10 L78 28 Z"/>
+    <rect x="58" y="36" width="12" height="10" rx="1" fill="#F3EDE0"/>
+    <rect x="48" y="86" width="32" height="6" fill="#0A1628"/>
+  </g>
+</svg>

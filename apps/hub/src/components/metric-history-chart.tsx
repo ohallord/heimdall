@@ -77,9 +77,9 @@ export function MetricHistoryChart({
   }
 
   useEffect(() => {
-    // Defer so the load's state updates do not run synchronously inside the effect.
-    const id = setTimeout(() => void loadRange(rangeMs), 0);
-    return () => clearTimeout(id);
+    // Fetch on mount / identity change; loadRange owns busy/error/points state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async load gated by ids
+    void loadRange(rangeMs);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial + metric/mount
   }, [agentId, metric, mount]);
 

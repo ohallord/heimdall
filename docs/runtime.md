@@ -1,4 +1,4 @@
-# Runtime threats
+# Runtime threats (Phase 20)
 
 Optional **Falco / Sidekick-compatible** webhook ingest for runtime policy events, plus expanded hub-side log threat rules. Privileged eBPF/Falco is **not** a hard dependency — operators who only stream agent logs still get intrusion-adjacent matches.
 
@@ -42,7 +42,7 @@ Accepted bodies:
 
 ## Log rules (no sensor required)
 
-Hub-side patterns on streamed agent logs also detect webshell/C2 download strings and privilege-escalation indicators (in addition to the SSH, sudo, reverse-shell and crypto-miner rules). See **Logs** and **Alarms** for matches.
+Hub-side patterns on streamed agent logs also detect webshell/C2 download strings and privilege-escalation indicators (in addition to Phase 7 SSH/sudo/reverse-shell/miner rules). See **Logs** and **Alarms** for matches.
 
 ## Verify
 

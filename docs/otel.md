@@ -1,4 +1,4 @@
-# OpenTelemetry metrics, logs & traces
+# OpenTelemetry metrics, logs & traces (Phases 14 / 23 / 29)
 
 Heimdall accepts **OTLP/HTTP JSON**:
 
@@ -6,7 +6,7 @@ Heimdall accepts **OTLP/HTTP JSON**:
 | --- | --- | --- |
 | Metrics | `/v1/metrics` | `otel_metric_samples` (+ optional host CPU/mem mirror) |
 | Logs | `/v1/logs` | `log_events` (same search / rule pack as agent file-tail) |
-| Traces | `/v1/traces` | `otel_spans`; shown on **Services** and the trace waterfall |
+| Traces | `/v1/traces` | `otel_spans` (Phase 29); shown on **Services** and the trace waterfall (Phase 30) |
 
 Point an OpenTelemetry Collector at the hub. Metric samples show as raw points on **Network**; named services (`service.name`) aggregate on **Services**. Log lines appear under **Dashboard → Logs** and run the hub log threat rules.
 
@@ -75,9 +75,9 @@ Mapped metric names:
 
 Log `source` preference: `_SYSTEMD_UNIT` / `systemd.unit` → `service.name` → `log.file.path` → `otel`.
 
-## Install (one command per target)
+## Install (one command per target, Phase 28)
 
-**Simplest:** `curl -fsSL https://<hub>/install.sh | sudo OTEL=1 bash` installs agent + collector, downloading both installers from the hub (see [deploy.md](deploy.md#one-command-host-install)). The per-target scripts below remain for collector-only, Docker and Kubernetes installs.
+**Simplest (Phase 31):** `curl -fsSL https://<hub>/install.sh | sudo OTEL=1 bash` installs agent + collector, downloading both installers from the hub (see [deploy.md](deploy.md#one-command-host-install-phase-31)). The per-target scripts below remain for collector-only, Docker and Kubernetes installs.
 
 Save the `hdo_…` token to a file (keeps it out of shell history); every script also accepts `OTEL_TOKEN`.
 Pass variables with `sudo env VAR=… script`. sudo resets the environment, and sudo-rs (newer Ubuntu) has no environment-preserving `-E` flag.
@@ -144,24 +144,11 @@ systemd unit: [`deploy/systemd/heimdall-otelcol.service`](../deploy/systemd/heim
 2. **Dashboard → Network → Recent OTEL points** shows metric names
 3. **Dashboard → Logs** shows journal/file lines from the host
 4. With `service.name` set, **Dashboard → Services** lists the service (metrics)
+- Traces: `curl` a sample export (see `docs/phases/phase-29-apm-traces/README.md`) and expect `{"accepted":N}`; rows land in `otel_spans`
+- Then **Dashboard → Services** lists the service with a `traces` tag (Rate / Errors / p50 / p95); open it for operations and filtered traces, and click a trace for the span waterfall (Phase 30)
 5. With `heimdall.agent_id`, host detail CPU/memory updates and log rows bind to that agent
-6. Traces: send a sample span and expect `{"accepted":1}`. **Dashboard → Services** then lists `smoke` with a `traces` tag (Rate / Errors / p50 / p95); open it for operations and traces, and click a trace for the span waterfall
 
-```bash
-HUB=https://hub.example.com HEIMDALL_OTEL_TOKEN=hdo_…
-NOW=$(date +%s%N); END=$((NOW + 120000000)); TID=$(openssl rand -hex 16)
-curl -sS -X POST "$HUB/v1/traces" -H "authorization: Bearer $HEIMDALL_OTEL_TOKEN" \
-  -H 'content-type: application/json' -d '{"resourceSpans":[{"resource":{"attributes":[
-  {"key":"service.name","value":{"stringValue":"smoke"}}]},"scopeSpans":[{"spans":[{
-  "traceId":"'"$TID"'","spanId":"eee19b7ec3c1b174",
-  "name":"GET /smoke","kind":2,"startTimeUnixNano":"'"$NOW"'",
-  "endTimeUnixNano":"'"$END"'"}]}]}]}'
-# → {"partialSuccess":{},"accepted":1}
-```
-
-Use current timestamps: the Services page only shows spans inside the selected window.
-
-## Traces
+## Traces (Phase 29)
 
 Every collector config (baremetal, Docker, Helm daemonset) runs an `otlp` receiver and a `traces` pipeline that forwards spans to `/v1/traces`. Point app SDKs at the local collector, not the hub:
 
@@ -179,11 +166,11 @@ Storage: one row per span in `otel_spans`, unique on `(org, trace_id, span_id)`,
 - Max **500** metric points or log records per request
 - Max **1000** spans per request; extras are dropped and reported as `partialSuccess.rejectedSpans`
 - Traces retention: **Settings → Metric history retention → Trace days** (default 7d, clamp 1–60d)
-- Metrics retention follows org metrics retention (default 60d; clamp 30–365d)
+- Metrics retention follows org metrics retention (default 60d since Phase 25; clamp 30–365d)
 - Protobuf Content-Type → **415**; use `encoding: json`
 - Agent file-tail (`HEIMDALL_LOG_PATHS` → `/api/v1/agents/logs`) remains available alongside OTEL logs
 
-## Kubernetes via Helm
+## Kubernetes via Helm (Phase 27)
 
 One command: `scripts/install-otel-k8s.sh` (see Install above). By hand:
 
@@ -199,7 +186,7 @@ helm upgrade --install heimdall deploy/helm/heimdall \
 - Endpoint defaults to the in-cluster hub Service; set `otel.collector.endpoint` for an external hub. Config changes need `kubectl rollout restart ds/heimdall-otelcol`.
 - Verified by `scripts/test-helm-otel.sh` (runs in CI).
 
-## eBPF auto-instrumentation for pods with no SDK
+## eBPF auto-instrumentation for pods with no SDK (Phase 33)
 
 Plex, Jellyfin, Emby, Syncthing and similar third-party images can't emit OTLP themselves. Grafana Beyla attaches eBPF probes from the node and emits HTTP/gRPC server and client spans for them, with `service.name` and `k8s.*` attributes taken from the pod.
 

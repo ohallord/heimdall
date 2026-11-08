@@ -1,5 +1,6 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { readJsonLimited } from "@/lib/http-guard/body";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
 import { takeChallenge } from "@/lib/auth/challenge-store";
 import { getSession } from "@/lib/auth/session";
@@ -32,7 +33,9 @@ async function postHandler(request: Request) {
     return NextResponse.json({ error: "missing challenge" }, { status: 400 });
   }
 
-  const response = (await request.json()) as RegistrationResponseJSON;
+  const raw = await readJsonLimited(request, 64 * 1024);
+  if (!raw.ok) return NextResponse.json({ error: "invalid body" }, { status: raw.status });
+  const response = raw.value as RegistrationResponseJSON;
   const verification = await verifyRegistration({
     response,
     expectedChallenge,

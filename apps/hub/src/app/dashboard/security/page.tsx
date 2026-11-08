@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { safeHttpUrl } from "@/lib/security/safe-url";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { SecurityScanActions } from "@/components/security-scan-actions";
@@ -194,9 +195,9 @@ export default async function SecurityPage({
                         {f.cve}
                       </span>
                     ) : null}
-                    {f.url ? (
+                    {safeHttpUrl(f.url) ? (
                       <a
-                        href={f.url}
+                        href={safeHttpUrl(f.url)!}
                         className="ml-2 font-mono text-xs text-muted underline"
                         target="_blank"
                         rel="noreferrer"

@@ -1,4 +1,4 @@
--- Heimdall schema. Applied on every hub start; keep every statement idempotent and additive.
+-- Heimdall Phase 1 schema
 
 CREATE TABLE IF NOT EXISTS organizations (
   id TEXT PRIMARY KEY,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS agent_tokens (
   revoked_at TIMESTAMPTZ
 );
 
--- Multi-cluster registry.
+-- Multi-cluster registry (activated in Phase 8 UX).
 CREATE TABLE IF NOT EXISTS clusters (
   id TEXT PRIMARY KEY,
   org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS agents (
   UNIQUE (org_id, hostname)
 );
 
--- Per-agent credentials.
+-- Phase 24: per-agent credentials.
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS secret_hash TEXT;
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS legacy_warned_at TIMESTAMPTZ;
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS alert_rules (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Additive for DBs created before dual (warn/alarm) thresholds
+-- Additive for DBs created before Phase 10 dual thresholds
 ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS warn_threshold DOUBLE PRECISION;
 ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS alarm_threshold DOUBLE PRECISION;
 
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS alert_events (
   message TEXT NOT NULL,
   payload_json TEXT NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  -- Alarm ops: status, mute, dismiss
+  -- Phase 16 alarm ops
   status TEXT NOT NULL DEFAULT 'open',
   fingerprint TEXT,
   muted_until TIMESTAMPTZ,
@@ -145,13 +145,13 @@ CREATE TABLE IF NOT EXISTS alert_events (
   dismissed_by TEXT
 );
 
--- Additive for DBs created before alarm ops
+-- Additive for DBs created before Phase 16 alarm ops
 ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'open';
 ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS fingerprint TEXT;
 ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ;
 ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ;
 ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS dismissed_by TEXT;
--- Auto-recovery
+-- Phase 26 auto-recovery
 ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS alert_events_org_status_created_idx
@@ -159,7 +159,7 @@ CREATE INDEX IF NOT EXISTS alert_events_org_status_created_idx
 CREATE INDEX IF NOT EXISTS alert_events_org_fingerprint_idx
   ON alert_events (org_id, fingerprint, created_at DESC);
 
--- Per-user notification preferences + quiet hours
+-- Phase 5: per-user notification preferences + quiet hours
 CREATE TABLE IF NOT EXISTS user_notification_prefs (
   user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS agent_metric_samples (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Range history queries
+-- Phase 11: range history queries
 CREATE INDEX IF NOT EXISTS agent_metric_samples_agent_collected_idx
   ON agent_metric_samples (agent_id, collected_at DESC);
 
@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS agent_k8s_latest (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Remote SCM credentials + unified vulnerability findings
+-- Phase 6: remote SCM credentials + unified vulnerability findings
 CREATE TABLE IF NOT EXISTS security_connections (
   id TEXT PRIMARY KEY,
   org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -275,23 +275,23 @@ CREATE TABLE IF NOT EXISTS vuln_findings (
   UNIQUE (org_id, source, external_id, resource, agent_key)
 );
 
--- Additive for DBs created before host posture
+-- Phase 13 additive for DBs created before host posture
 ALTER TABLE vuln_findings ADD COLUMN IF NOT EXISTS agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL;
 ALTER TABLE vuln_findings ADD COLUMN IF NOT EXISTS agent_key TEXT NOT NULL DEFAULT '';
 ALTER TABLE vuln_findings DROP CONSTRAINT IF EXISTS vuln_findings_source_check;
 ALTER TABLE vuln_findings ADD CONSTRAINT vuln_findings_source_check
   CHECK (source IN ('trivy', 'osv', 'github', 'gitlab', 'host_posture', 'runtime'));
--- Replace the older unique (4-col) and recreate named 5-col unique
+-- Replace pre-Phase-13 unique (4-col) and recreate named 5-col unique
 ALTER TABLE vuln_findings DROP CONSTRAINT IF EXISTS vuln_findings_org_id_source_external_id_resource_key;
 ALTER TABLE vuln_findings DROP CONSTRAINT IF EXISTS vuln_findings_org_id_source_external_id_resource_agent_key_key;
 ALTER TABLE vuln_findings DROP CONSTRAINT IF EXISTS vuln_findings_org_source_ext_res_agent_key;
 ALTER TABLE vuln_findings ADD CONSTRAINT vuln_findings_org_source_ext_res_agent_key
   UNIQUE (org_id, source, external_id, resource, agent_key);
 
--- Operator resolve timestamp
+-- Phase 18: operator resolve timestamp
 ALTER TABLE vuln_findings ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 
--- Streamed log lines + rule matches
+-- Phase 7: streamed log lines + rule matches
 CREATE TABLE IF NOT EXISTS log_events (
   id TEXT PRIMARY KEY,
   org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -310,8 +310,8 @@ CREATE INDEX IF NOT EXISTS log_events_org_observed_idx
 CREATE INDEX IF NOT EXISTS log_events_org_source_idx
   ON log_events (org_id, source);
 
--- UniFi webhook + OTEL ingest shared secrets
--- runtime_webhook (Falco/Sidekick optional adapter)
+-- Phase 14: UniFi webhook + OTEL ingest shared secrets
+-- Phase 20: runtime_webhook (Falco/sidekick optional adapter)
 CREATE TABLE IF NOT EXISTS integration_tokens (
   id TEXT PRIMARY KEY,
   org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -327,7 +327,7 @@ ALTER TABLE integration_tokens DROP CONSTRAINT IF EXISTS integration_tokens_kind
 ALTER TABLE integration_tokens ADD CONSTRAINT integration_tokens_kind_check
   CHECK (kind IN ('unifi_webhook', 'otel_ingest', 'runtime_webhook'));
 
--- OTLP HTTP JSON metric points
+-- Phase 14: OTLP HTTP JSON metric points
 CREATE TABLE IF NOT EXISTS otel_metric_samples (
   id TEXT PRIMARY KEY,
   org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -358,7 +358,7 @@ ON CONFLICT (id) DO NOTHING;
 -- pending TOTP replacement (old secret stays active until confirm)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending TEXT;
 
--- OTLP trace spans (APM)
+-- Phase 29: OTLP trace spans (APM foundation)
 CREATE TABLE IF NOT EXISTS otel_spans (
   id TEXT PRIMARY KEY,
   org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -388,7 +388,7 @@ CREATE INDEX IF NOT EXISTS otel_spans_org_trace_idx
 CREATE INDEX IF NOT EXISTS otel_spans_org_service_idx
   ON otel_spans (org_id, service_name, start_at DESC);
 
--- Hub-wide bootstrap token override (rotate / disable from Settings → Agents)
+-- Phase 32: hub-wide bootstrap token override (rotate / disable from Settings → Agents)
 CREATE TABLE IF NOT EXISTS hub_bootstrap (
   id TEXT PRIMARY KEY,
   mode TEXT NOT NULL DEFAULT 'env' CHECK (mode IN ('env', 'rotated', 'disabled')),
@@ -397,3 +397,9 @@ CREATE TABLE IF NOT EXISTS hub_bootstrap (
   updated_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Security review: server-side session revocation. Bumped on logout; cookies carry the
+-- version they were issued at and stop working once it moves.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
+-- Security review: last accepted TOTP time step (blocks code replay inside the window).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step BIGINT;

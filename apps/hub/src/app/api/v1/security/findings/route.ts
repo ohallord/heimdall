@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { requireSession } from "@/lib/auth/session";
 import type { VulnSource } from "@/lib/db/types";
 import { listFindings } from "@/lib/security/store";
@@ -49,10 +50,6 @@ export async function GET(request: Request) {
       })),
     });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }

@@ -88,6 +88,8 @@ export async function findOrCreateOidcUser(input: {
   sub: string;
   email: string;
   name: string;
+  /** True only when the IdP asserted email_verified=true for this address. */
+  emailVerified?: boolean;
 }): Promise<User> {
   const db = await getDb();
   const bySub = await db.query<User>(
@@ -101,8 +103,18 @@ export async function findOrCreateOidcUser(input: {
     [input.orgId, input.email.toLowerCase()],
   );
   if (byEmail.rows[0]) {
+    // Linking hands the IdP account the local account (possibly an admin). Only do it when
+    // the IdP vouches for the address, and never re-point an account already linked elsewhere.
+    if (input.emailVerified !== true) {
+      const { OidcError } = await import("./client");
+      throw new OidcError("email_not_verified");
+    }
+    if (byEmail.rows[0].oidc_sub) {
+      const { OidcError } = await import("./client");
+      throw new OidcError("account_linked_elsewhere");
+    }
     await db.query(
-      `UPDATE users SET oidc_sub = $1, oidc_provider_id = $2 WHERE id = $3`,
+      `UPDATE users SET oidc_sub = $1, oidc_provider_id = $2 WHERE id = $3 AND oidc_sub IS NULL`,
       [input.sub, input.providerId, byEmail.rows[0].id],
     );
     return openUser(

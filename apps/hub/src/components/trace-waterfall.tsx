@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { formatMs, type WaterfallRow } from "@/lib/otel/traces";
 
-/** Server-rendered span waterfall. No client JS. */
+/** Server-rendered span waterfall (Phase 30). No client JS. */
 export function TraceWaterfall({
   rows,
   traceStart,

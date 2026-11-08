@@ -101,6 +101,7 @@ describe("agent admin APIs", () => {
       orgName: "Other", adminName: "B", email: "b@example.com", password: "CorrectHorse1",
     });
     login("admin", true, other.org.id);
+    session.userId = other.user.id; // a real admin of the other org
     expect((await revoke(post(), ctx(agent.id))).status).toBe(404);
     expect((await reenroll(post(), ctx(agent.id))).status).toBe(404);
     expect((await authorizeAgentIngest(ingestReq(agent.secret), agent.id)).ok).toBe(true);

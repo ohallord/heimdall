@@ -4,7 +4,7 @@ import { safeEqual } from "@/lib/http-guard/compare";
 import { newBootstrapToken } from "@/lib/ids";
 
 /**
- * The hub-wide bootstrap (register) token.
+ * Phase 32: the hub-wide bootstrap (register) token.
  *
  * Modes (single row in hub_bootstrap; no row = env):
  * - env:      HEIMDALL_BOOTSTRAP_TOKEN (or the dev default with HEIMDALL_DEV=1 outside production)
@@ -15,13 +15,13 @@ import { newBootstrapToken } from "@/lib/ids";
  * never affects them.
  */
 
-export const DEV_BOOTSTRAP_TOKEN = "heimdall-dev-token";
+export const DEV_BOOTSTRAP_TOKEN = "CHANGE_ME_BOOTSTRAP_TOKEN";
 const MIN_STRONG_LENGTH = 24;
 const CACHE_MS = 5_000;
 
 export type BootstrapMode = "env" | "rotated" | "disabled";
 
-/** Env value only (kept for callers/tests that predate rotation). */
+/** Env value only (kept for callers/tests that predate Phase 32). */
 export function resolveBootstrapToken(): string | null {
   const fromEnv = process.env.HEIMDALL_BOOTSTRAP_TOKEN?.trim();
   if (fromEnv) return fromEnv;

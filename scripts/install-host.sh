@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Heimdall one-command host install. Served by the hub at /install.sh:
+# Heimdall one-command host install (Phase 31). Served by the hub at /install.sh:
 #
 #   curl -fsSL https://<hub>/install.sh | sudo bash                     # prompts for the agent token
 #   curl -fsSL https://<hub>/install.sh | sudo TOKEN=hdt_… bash         # non-interactive; token lands
@@ -18,6 +18,12 @@
 #   OTEL=1                      install the collector, prompting for its token
 #   HOSTNAME_VALUE CLUSTER_ID ENABLE_K8S LOG_UNITS LOG_PATHS OTELCOL_BIN DOCKER   passed through
 #                               (DOCKER=0: do not add user heimdall to the docker group)
+#   EXPECTED_SHA256             sha256 of the hub's SHA256SUMS, obtained out of band (release notes,
+#                               another admin); when set it must match or nothing is installed.
+#                               Without it, SHA256SUMS comes from the same hub as the files, so it
+#                               only catches corruption / truncation, not a tampered hub or MITM.
+#   HEIMDALL_ALLOW_INSECURE=1   allow a plain-http HUB_URL that is not loopback (trusted LAN only:
+#                               the agent token and root-run binaries cross the network unencrypted)
 #   DRY_RUN=1                   download + verify, then print the install steps only
 #   DESTDIR                     root prefix (tests)
 #   PURGE=1                     with --uninstall, also remove /var/lib/heimdall
@@ -36,7 +42,7 @@ TTY="${HEIMDALL_TTY:-/dev/tty}"
 die() { echo "error: $*" >&2; exit "${2:-1}"; }
 say() { echo "==> $*"; }
 
-usage() { sed -n "2,23p" "${BASH_SOURCE[0]}" 2>/dev/null | sed 's/^# \{0,1\}//'; }
+usage() { sed -n "2,29p" "${BASH_SOURCE[0]}" 2>/dev/null | sed 's/^# \{0,1\}//'; }
 
 MODE=install
 case "${1:-}" in
@@ -48,6 +54,25 @@ esac
 
 [[ -n "$HUB_URL" ]] || die "HUB_URL is required (e.g. curl -fsSL https://hub/install.sh | sudo HUB_URL=https://hub bash)" 2
 HUB_URL="${HUB_URL%/}"
+
+# Binaries fetched here run as root: require TLS unless the hub is on this machine.
+hub_url_secure() {
+  local rest host
+  case "$1" in https://*) return 0 ;; http://*) ;; *) return 1 ;; esac
+  rest="${1#http://}"; rest="${rest%%/*}"; rest="${rest##*@}"
+  case "$rest" in "[::1]"|"[::1]:"*) return 0 ;; esac
+  host="${rest%%:*}"
+  [[ "$host" == localhost || "$host" =~ ^127\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+if ! hub_url_secure "$HUB_URL"; then
+  case "${HEIMDALL_ALLOW_INSECURE:-0}" in
+    1|true|yes|on)
+      echo "warning: ${HUB_URL} is not https; downloads and the agent token are unencrypted (HEIMDALL_ALLOW_INSECURE=1)" >&2 ;;
+    *) die "refusing non-https HUB_URL ${HUB_URL}: serve the hub over https, or on a trusted LAN re-run with HEIMDALL_ALLOW_INSECURE=1 (curl -fsSL ${HUB_URL}/install.sh | sudo HEIMDALL_ALLOW_INSECURE=1 bash)" 2 ;;
+  esac
+  # The agent applies the same rule to its hub URL; carry the opt-in into agent.env.
+  export HEIMDALL_ALLOW_INSECURE=1
+fi
 
 if [[ -z "$DESTDIR" && "$DRY_RUN" != "1" ]]; then
   [[ "$(id -u)" -eq 0 ]] || die "run as root: curl -fsSL ${HUB_URL}/install.sh | sudo bash"
@@ -105,6 +130,15 @@ curl -fsSL "${HUB_URL}/downloads/SHA256SUMS" -o "$W/dl/SHA256SUMS" \
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | awk '{print $1}'
 }
+
+# SHA256SUMS is served by the same hub as the files: on its own it only guards against corruption.
+# EXPECTED_SHA256 (from a trusted channel) pins the manifest, and through it every file below.
+if [[ -n "${EXPECTED_SHA256:-}" ]]; then
+  sums_sha="$(sha256_of "$W/dl/SHA256SUMS")"
+  [[ "$sums_sha" == "$(printf '%s' "$EXPECTED_SHA256" | tr 'A-F' 'a-f')" ]] \
+    || die "SHA256SUMS from ${HUB_URL} does not match EXPECTED_SHA256 (got ${sums_sha}); nothing installed"
+  say "SHA256SUMS matches EXPECTED_SHA256"
+fi
 
 # fetch NAME DEST MODE — download, verify against SHA256SUMS, place into the mini repo layout.
 fetch() {

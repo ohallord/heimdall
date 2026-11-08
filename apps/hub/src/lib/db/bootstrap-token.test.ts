@@ -31,7 +31,7 @@ describe("resolveBootstrapToken", () => {
     delete process.env.HEIMDALL_BOOTSTRAP_TOKEN;
     process.env.HEIMDALL_DEV = "1";
     process.env.NODE_ENV = "development";
-    expect(resolveBootstrapToken()).toBe("heimdall-dev-token");
+    expect(resolveBootstrapToken()).toBe("CHANGE_ME_BOOTSTRAP_TOKEN");
   });
 
   it("ignores HEIMDALL_DEV in production", () => {

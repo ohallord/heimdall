@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
- * Files the hub serves for one-command host installs, produced by
+ * Phase 31: files the hub serves for one-command host installs, produced by
  * scripts/build-dist.sh (baked into the image at /app/dist).
  */
 export function distDir(): string {
@@ -86,7 +86,7 @@ export async function readInstallScript(): Promise<string | null> {
 }
 
 /**
- * Copy-ready one-command installs for an enrollment token.
+ * Copy-ready one-command installs for an enrollment token (Phase 32).
  *
  * The default commands prompt for the token instead of passing it on the sudo
  * command line: `sudo TOKEN=… bash` writes the token into sudo's journal
@@ -98,9 +98,27 @@ export function installCommandsFor(
   token: string,
 ): { agent: string; agentWithOtel: string; agentNonInteractive: string } {
   const hub = hubUrlFor(request) ?? "https://<hub>";
+  const opt = insecureOptIn(hub);
   return {
-    agent: `curl -fsSL ${hub}/install.sh | sudo bash`,
-    agentWithOtel: `curl -fsSL ${hub}/install.sh | sudo OTEL=1 bash`,
-    agentNonInteractive: `curl -fsSL ${hub}/install.sh | sudo TOKEN=${token} bash`,
+    agent: `curl -fsSL ${hub}/install.sh | sudo ${opt}bash`,
+    agentWithOtel: `curl -fsSL ${hub}/install.sh | sudo ${opt}OTEL=1 bash`,
+    agentNonInteractive: `curl -fsSL ${hub}/install.sh | sudo ${opt}TOKEN=${token} bash`,
   };
+}
+
+/**
+ * The host installer refuses a plain-http hub that is not on loopback (it downloads binaries
+ * that run as root). When this hub is served over http, the copy-paste command must carry the
+ * explicit opt-in, so operators see that the LAN path is unencrypted.
+ */
+export function insecureOptIn(hub: string): string {
+  try {
+    const u = new URL(hub);
+    if (u.protocol !== "http:") return "";
+    const h = u.hostname.replace(/^\[|\]$/g, "");
+    if (h === "localhost" || h === "::1" || /^127\./.test(h)) return "";
+    return "HEIMDALL_ALLOW_INSECURE=1 ";
+  } catch {
+    return "";
+  }
 }

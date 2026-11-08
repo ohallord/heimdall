@@ -1,11 +1,12 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { requireSession } from "@/lib/auth/session";
 import { dismissAlertEventsBulk } from "@/lib/db/store";
 
 export const dynamic = "force-dynamic";
 
-/** Mass-dismiss open/muted alerts older than N days (0 = all). */
+/** Phase 26: mass-dismiss open/muted alerts older than N days (0 = all). */
 async function postHandler(request: Request) {
   try {
     const session = await requireSession({ permission: "alerts:write" });
@@ -26,11 +27,7 @@ async function postHandler(request: Request) {
     });
     return NextResponse.json({ dismissed });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

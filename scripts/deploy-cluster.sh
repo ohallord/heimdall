@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Heimdall: build + deploy on an existing Kubernetes release (single-node k3s).
+# Heimdall: build + deploy on an existing Kubernetes release (homelab / k3s lab).
 #
 # One-shot after git pull on the cluster node:
 #   ./scripts/deploy-cluster.sh
@@ -57,6 +57,8 @@ compose() {
   (cd "${COMPOSE_DIR}" &&
     HEIMDALL_BOOTSTRAP_TOKEN="${HEIMDALL_BOOTSTRAP_TOKEN:-build-only-placeholder}" \
     HEIMDALL_SECRET_KEY="${HEIMDALL_SECRET_KEY:-build-only-placeholder}" \
+    HEIMDALL_SESSION_SECRET="${HEIMDALL_SESSION_SECRET:-build-only-placeholder}" \
+    POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-build-only-placeholder}" \
     docker compose "$@")
 }
 
@@ -64,7 +66,7 @@ git_short_sha() {
   git -C "${HEIMDALL_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || date +%Y%m%d%H%M%S
 }
 
-# Unique tags per commit: :latest + IfNotPresent can leave a node on a stale hub.
+# Unique tags per commit — :latest + IfNotPresent left homelab on a stale hub.
 resolve_image_tags() {
   local sha
   sha="$(git_short_sha)"
@@ -89,7 +91,8 @@ Commands:
   status    kubectl get pods,svc,pvc,events
   help      this text
 
-Examples (on the cluster node, from the repo root):
+Examples (on homelab):
+  cd /path/to/heimdall
   ./scripts/deploy-cluster.sh
 
   # Chart-only (no image rebuild):
@@ -140,7 +143,7 @@ import_image() {
   esac
 }
 
-# Unique strings from the current login page (avoid substring false positives like matching
+# Phase 9 unique strings (avoid substring false positives like matching
 # "Enter Authenticator Code" inside "Enter your authenticator code.").
 MFA_NEW_BLURB='Open your authenticator app and enter the 6-digit code'
 MFA_OLD_LABEL='children:"TOTP"'
@@ -150,7 +153,7 @@ assert_hub_mfa_source() {
   log "Verify MFA copy in build context source"
   [[ -f "${login}" ]] || die "missing ${login}"
   if ! grep -Fq "${MFA_NEW_BLURB}" "${login}"; then
-    die "${login} missing current MFA copy — run: git fetch && git reset --hard origin/main"
+    die "${login} missing Phase 9 blurb — run: git fetch && git reset --hard origin/main"
   fi
   if grep -Fq "Enter your authenticator code." "${login}"; then
     die "${login} still has old MFA blurb — working tree is stale"
@@ -158,11 +161,11 @@ assert_hub_mfa_source() {
   if grep -E '^[[:space:]]*TOTP[[:space:]]*$' "${login}"; then
     die "${login} still has TOTP label — working tree is stale"
   fi
-  log "OK — ${login} has current MFA copy"
+  log "OK — ${login} has Phase 9 MFA copy"
   git -C "${HEIMDALL_ROOT}" --no-pager log -1 --oneline -- apps/hub/src/app/login/page.tsx || true
 }
 
-# Fail closed if the built hub still has outdated MFA copy.
+# Fail closed if the built hub still has pre–Phase 9 MFA copy.
 assert_hub_mfa_copy() {
   local img="$1"
   log "Verify MFA copy inside ${img}"
@@ -171,13 +174,13 @@ assert_hub_mfa_copy() {
   # Use sh -c so the pattern is one argv (docker --entrypoint grep breaks on spaces).
   if ! docker run --rm --entrypoint sh "${img}" -c \
     "grep -RFq '${MFA_NEW_BLURB}' /app"; then
-    die "hub image ${img} missing current MFA blurb — Docker built stale/wrong context"
+    die "hub image ${img} missing Phase 9 MFA blurb — Docker built stale/wrong context"
   fi
   if docker run --rm --entrypoint sh "${img}" -c \
     "grep -RFq '${MFA_OLD_LABEL}' /app || grep -RFq 'children:\\\"TOTP\\\"' /app"; then
     die "hub image ${img} still contains TOTP label — refusing to deploy"
   fi
-  log "OK — image has current MFA copy"
+  log "OK — image has Phase 9 MFA copy"
 }
 
 cmd_pull() {
@@ -261,7 +264,7 @@ cmd_helm() {
   helm status "${RELEASE_NAME}" -n "${K8S_NAMESPACE}" >/dev/null 2>&1 \
     || die "release ${RELEASE_NAME} not found in ${K8S_NAMESPACE}"
 
-  # Plain --reuse-values ignores new chart defaults (e.g. nil .Values.otel).
+  # Plain --reuse-values ignores new chart defaults (Phase 27: nil .Values.otel).
   helm_reuse_args "${RELEASE_NAME}" "${K8S_NAMESPACE}"
 
   local -a args=(
@@ -349,7 +352,7 @@ cmd_verify() {
     log "Watch list looks good"
   fi
 
-  log "Done — hard-refresh the browser (current MFA = Enter Authenticator Code, not TOTP)"
+  log "Done — hard-refresh the browser (Phase 9 MFA = Enter Authenticator Code, not TOTP)"
 }
 
 cmd_status() {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { getSession } from "@/lib/auth/session";
 import {
   OidcError,
@@ -14,12 +15,21 @@ export const dynamic = "force-dynamic";
 function publicBase(request: Request): string {
   const env = process.env.HEIMDALL_PUBLIC_URL?.replace(/\/$/, "");
   if (env) return env;
+  // The Host header is client-controlled; in production the redirect_uri must come from config.
+  if (process.env.NODE_ENV === "production") {
+    throw Object.assign(new Error("set HEIMDALL_PUBLIC_URL to use single sign-on"), { status: 503 });
+  }
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
 
 export async function GET(request: Request) {
-  const base = publicBase(request);
+  let base: string;
+  try {
+    base = publicBase(request);
+  } catch (err) {
+    return apiError(err);
+  }
   try {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
@@ -83,6 +93,7 @@ export async function GET(request: Request) {
 
     const sub = claims.sub;
     let email = claims.email;
+    let emailVerified = claims.email ? claims.email_verified === true : false;
     let name = claims.name ?? claims.preferred_username;
 
     if (discovery.userinfo_endpoint && tokens.access_token) {
@@ -94,7 +105,10 @@ export async function GET(request: Request) {
         if (info.sub !== sub) {
           return NextResponse.redirect(`${base}/login?error=sub_mismatch`);
         }
-        email = email ?? info.email;
+        if (!email && info.email) {
+          email = info.email;
+          emailVerified = info.email_verified === true;
+        }
         name = name ?? info.name ?? info.preferred_username;
       } catch {
         /* userinfo is optional; verified id_token claims suffice */
@@ -110,6 +124,7 @@ export async function GET(request: Request) {
       providerId: provider.id,
       sub,
       email,
+      emailVerified,
       name: name ?? email,
     });
 
@@ -118,6 +133,7 @@ export async function GET(request: Request) {
     session.email = user.email;
     session.role = user.role;
     session.isLoggedIn = true;
+    session.sessionVersion = Number(user.session_version ?? 0);
     // OIDC users skip local MFA on this path; admins who also enrolled MFA still enforce it.
     if (user.role === "admin" && user.mfa_enrolled) {
       session.mfaVerified = false;
@@ -128,12 +144,9 @@ export async function GET(request: Request) {
     await session.save();
     return NextResponse.redirect(`${base}/dashboard`);
   } catch (err) {
-    const msg =
-      err instanceof OidcError
-        ? err.code
-        : err instanceof Error
-          ? err.message
-          : "oidc_failed";
+    // Only our own error codes reach the URL; IdP/driver text stays in the server log.
+    if (!(err instanceof OidcError)) console.error("[heimdall] oidc callback failed:", err);
+    const msg = err instanceof OidcError ? err.code : "oidc_failed";
     return NextResponse.redirect(
       `${base}/login?error=${encodeURIComponent(msg.slice(0, 80))}`,
     );

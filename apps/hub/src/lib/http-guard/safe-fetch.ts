@@ -76,7 +76,10 @@ function v4Blocked(b: number[]): boolean {
     (a === 100 && c >= 64 && c <= 127) ||
     (a === 169 && c === 254) ||
     (a === 172 && c >= 16 && c <= 31) ||
-    (a === 192 && c === 168)
+    (a === 192 && c === 168) ||
+    (a === 192 && c === 0 && b[2] === 0) || // 192.0.0.0/24 IETF protocol assignments
+    (a === 198 && (c === 18 || c === 19)) || // 198.18.0.0/15 benchmarking
+    a >= 224 // multicast, reserved, broadcast
   );
 }
 
@@ -89,6 +92,13 @@ export function isBlockedIp(ip: string): boolean {
   // IPv4-mapped ::ffff:a.b.c.d and deprecated IPv4-compatible ::a.b.c.d
   if (allZero(b.slice(0, 10)) && b[10] === 0xff && b[11] === 0xff) return v4Blocked(b.slice(12));
   if (allZero(b.slice(0, 12))) return true; // :: , ::1 and IPv4-compatible
+  // NAT64 64:ff9b::/96 and 64:ff9b:1::/48 embed an IPv4 target; check the embedded address.
+  if (b[0] === 0x00 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b) {
+    return allZero(b.slice(4, 12)) ? v4Blocked(b.slice(12)) : true;
+  }
+  if (b[0] === 0x20 && b[1] === 0x02) return v4Blocked(b.slice(2, 6)); // 6to4 2002::/16
+  if (b[0] === 0xff) return true; // multicast ff00::/8
+  if (b[0] === 0xfe && (b[1] & 0xc0) === 0xc0) return true; // deprecated site-local fec0::/10
   if ((b[0] & 0xfe) === 0xfc) return true; // fc00::/7
   if (b[0] === 0xfe && (b[1] & 0xc0) === 0x80) return true; // fe80::/10
   return false;
@@ -153,7 +163,16 @@ type Init = {
   method?: string;
   headers?: Record<string, string>;
   body?: string | Uint8Array;
+  signal?: AbortSignal | null;
 };
+
+/** Credentials that must not follow a redirect to a different origin. */
+const CREDENTIAL_HEADERS = new Set(["authorization", "cookie", "proxy-authorization", "private-token", "x-api-key"]);
+
+function stripCredentials(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!headers) return headers;
+  return Object.fromEntries(Object.entries(headers).filter(([k]) => !CREDENTIAL_HEADERS.has(k.toLowerCase())));
+}
 
 function once(
   url: URL,
@@ -206,6 +225,10 @@ function once(
     );
     req.on("timeout", () => req.destroy(new Error(`timeout after ${timeoutMs}ms`)));
     req.on("error", reject);
+    if (init.signal) {
+      if (init.signal.aborted) req.destroy(new Error("aborted"));
+      else init.signal.addEventListener("abort", () => req.destroy(new Error("aborted")), { once: true });
+    }
     if (init.body !== undefined) req.write(init.body);
     req.end();
   });
@@ -228,7 +251,9 @@ export async function safeFetch(
     const loc = r.headers.get("location");
     if (r.status >= 300 && r.status < 400 && loc) {
       if (hop >= maxRedirects) throw new Error("too many redirects");
-      target = new URL(loc, url);
+      const next = new URL(loc, url);
+      if (next.origin !== url.origin) cur = { ...cur, headers: stripCredentials(cur.headers) };
+      target = next;
       if (r.status === 303 || ((r.status === 301 || r.status === 302) && cur.method === "POST")) {
         cur = { ...cur, method: "GET", body: undefined };
       }
@@ -241,4 +266,22 @@ export async function safeFetch(
 
 /** `fetch`-shaped SSRF-guarded fetch: the default for every admin-configured outbound URL. */
 export const guardedFetch: typeof fetch = (input, init) =>
-  safeFetch(input as string | URL, init as never);
+  safeFetch(input as string | URL, normalizeInit(init));
+
+/** Map fetch's RequestInit onto what node:http can write (URLSearchParams, Headers, buffers). */
+export function normalizeInit(init: RequestInit | undefined): Init {
+  if (!init) return {};
+  let headers: Record<string, string> | undefined;
+  if (init.headers instanceof Headers) headers = Object.fromEntries(init.headers.entries());
+  else if (Array.isArray(init.headers)) headers = Object.fromEntries(init.headers);
+  else headers = init.headers as Record<string, string> | undefined;
+  const b = init.body;
+  let body: string | Uint8Array | undefined;
+  if (b == null) body = undefined;
+  else if (typeof b === "string") body = b;
+  else if (b instanceof URLSearchParams) body = b.toString();
+  else if (b instanceof Uint8Array) body = b;
+  else if (b instanceof ArrayBuffer) body = new Uint8Array(b);
+  else throw new TypeError("guardedFetch: unsupported body type");
+  return { method: init.method, headers, body, signal: init.signal };
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot host posture scan → hub ingest.
+# One-shot Phase 13 host posture scan → hub ingest.
 #
 # Required:
 #   HUB_URL   Hub base URL (e.g. http://127.0.0.1:43123)
@@ -157,13 +157,13 @@ if [[ -n "${HEIMDALL_HOST_ROOT:-}" || -n "${ROOT:-}" ]]; then
   export HEIMDALL_HOST_ROOT="$EFFECTIVE_ROOT"
 fi
 
-set -x
-"$AGENT_BIN" scan-host \
+# Token via env (HEIMDALL_BOOTSTRAP_TOKEN), never argv: argv is world-readable in /proc and ps.
+# No `set -x` here either — xtrace would echo the token.
+echo "+ $AGENT_BIN scan-host --hub $HUB_URL --hostname $HOSTNAME_VALUE --root $EFFECTIVE_ROOT"
+HEIMDALL_BOOTSTRAP_TOKEN="$TOKEN" "$AGENT_BIN" scan-host \
   --hub "$HUB_URL" \
-  --token "$TOKEN" \
   --hostname "$HOSTNAME_VALUE" \
   --root "$EFFECTIVE_ROOT"
-set +x
 
 echo "==> done — open hub Security → Host posture, or the host Security / Posture section"
 echo "    ${HUB_URL}/dashboard/security?source=host_posture"

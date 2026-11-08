@@ -40,7 +40,7 @@ export async function restoreOrgBackup(input: {
   for (const ch of input.backup.alertChannels ?? []) {
     const config = { ...ch.config };
     // Skip channels whose secrets were redacted unless they still look usable.
-    if (JSON.stringify(config).includes("[redacted]") && ch.kind !== "slack") {
+    if (JSON.stringify(config).includes("[redacted]")) {
       // still restore structure with placeholder disabled
       await upsertAlertChannel({
         orgId: input.orgId,
@@ -117,7 +117,9 @@ export async function restoreOrgBackup(input: {
 
   let oidcProviders = 0;
   for (const p of input.backup.oidcProviders ?? []) {
-    if (!p.clientSecret) continue;
+    if (!p.clientSecret || p.clientSecret === "[redacted]") continue;
+    // Restored disabled: an identity provider decides who can sign in as whom, so an admin
+    // re-enables it in Settings after checking the issuer.
     await upsertOidcProvider({
       orgId: input.orgId,
       name: p.name,
@@ -125,7 +127,7 @@ export async function restoreOrgBackup(input: {
       clientId: p.clientId,
       clientSecret: p.clientSecret,
       scopes: p.scopes,
-      enabled: p.enabled,
+      enabled: false,
     });
     oidcProviders += 1;
   }

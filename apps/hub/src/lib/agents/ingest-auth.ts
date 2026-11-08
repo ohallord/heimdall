@@ -6,6 +6,7 @@ import {
 } from "@/lib/db/store";
 import { matchesBootstrapToken } from "@/lib/agents/bootstrap";
 import { getDb } from "@/lib/db/client";
+import { rememberValidToken } from "@/lib/http-guard/ingest";
 import type { AgentRow } from "@/lib/db/types";
 
 export type AgentIngestAuth =
@@ -22,7 +23,8 @@ function legacyTokensAllowed(): boolean {
 /**
  * Authorize post-register agent APIs (heartbeat/metrics/logs/vulns).
  * 1. `hda_` per-agent secret: must belong to the agent named in the body (else 404), not revoked.
- * 2. Legacy org/bootstrap token (grace period): binds agentId to the token's org; warns once/day.
+ * 2. Legacy org/bootstrap token (grace period): only for agents with no per-agent secret yet,
+ *    binds agentId to the token's org; warns once/day.
  */
 export async function authorizeAgentIngest(
   request: Request,
@@ -47,6 +49,7 @@ export async function authorizeAgentIngest(
     if (!owner) return { ok: false, error: "invalid agent token", status: 401 };
     if (owner.revoked_at) return { ok: false, error: "agent revoked", status: 401 };
     if (owner.id !== id) return { ok: false, error: "agent not found", status: 404 };
+    rememberValidToken(token);
     return { ok: true, orgId: owner.org_id, agent: owner };
   }
 
@@ -66,6 +69,11 @@ export async function authorizeAgentIngest(
     return { ok: false, error: "agent not found", status: 404 };
   }
   if (agent.revoked_at) return { ok: false, error: "agent revoked", status: 401 };
+  // An agent that holds a per-agent secret must use it. Otherwise any host with the shared
+  // enrollment/bootstrap token could post metrics, logs or findings as this agent.
+  if (agent.secret_hash) {
+    return { ok: false, error: "agent has a per-agent secret; shared token refused", status: 401 };
+  }
 
   // Deprecation warning, at most once per agent per day.
   const warned = await db.query(
@@ -80,12 +88,19 @@ export async function authorizeAgentIngest(
     );
   }
 
+  rememberValidToken(token);
   return { ok: true, orgId, agent };
 }
 
 async function resolveTokenOrgId(token: string): Promise<string | null> {
   const tokenRow = await findActiveToken(token);
-  if (tokenRow) return tokenRow.org_id;
+  if (tokenRow) {
+    // A spent single/limited-use enrollment token must not keep authenticating ingest.
+    if (tokenRow.max_uses != null && Number(tokenRow.use_count ?? 0) >= Number(tokenRow.max_uses)) {
+      return null;
+    }
+    return tokenRow.org_id;
+  }
 
   if (await matchesBootstrapToken(token)) {
     return (await ensureBootstrapOrg()).id;

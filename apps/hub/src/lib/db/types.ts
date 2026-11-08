@@ -19,6 +19,8 @@ export type User = {
   totp_pending: string | null;
   oidc_sub: string | null;
   oidc_provider_id: string | null;
+  session_version?: number;
+  totp_last_step?: string | number | null;
   created_at: string;
 };
 
@@ -118,7 +120,7 @@ export type AlertEventRow = {
   muted_until: string | null;
   dismissed_at: string | null;
   dismissed_by: string | null;
-  /** Set when the system recovered and the alert auto-closed. */
+  /** Set when the system recovered and the alert auto-closed (Phase 26). */
   resolved_at: string | null;
 };
 
@@ -311,7 +313,7 @@ export type K8sDeploymentMetric = {
   healthy: boolean;
 };
 
-/** NodePort / LoadBalancer / ExternalIP  Services. */
+/** NodePort / LoadBalancer / ExternalIP Services (Phase 21). */
 export type K8sServiceExposureMetric = {
   namespace: string;
   name: string;
@@ -348,9 +350,9 @@ export type K8sClusterMetric = {
   deploymentsTotal: number;
   deploymentsUnhealthy: number;
   deployments?: K8sDeploymentMetric[];
-  /** Publicly exposed Services (optional; older agents omit). */
+  /** Phase 21: publicly exposed Services (optional; older agents omit). */
   exposedServices?: K8sServiceExposureMetric[];
-  /** NetworkPolicy coverage summary. */
+  /** Phase 21: NetworkPolicy coverage summary. */
   networkPolicy?: K8sNetworkPolicySummary;
 };
 

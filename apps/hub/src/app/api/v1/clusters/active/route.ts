@@ -1,5 +1,6 @@
 import { mutating } from "@/lib/http-guard/mutating";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { setActiveCluster } from "@/lib/clusters/store";
@@ -25,11 +26,7 @@ async function postHandler(request: Request) {
       activeClusterId: settings.active_cluster_id,
     });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }
 

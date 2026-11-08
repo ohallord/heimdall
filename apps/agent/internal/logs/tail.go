@@ -24,6 +24,10 @@ func ReadNewLines(path string, offset int64, maxLines int) ([]Line, int64, error
 		maxLines = 200
 	}
 
+	if err := checkSymlink(path); err != nil {
+		return nil, offset, err
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {

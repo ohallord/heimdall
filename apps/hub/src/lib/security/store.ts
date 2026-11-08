@@ -1,3 +1,4 @@
+import { safeHttpUrl } from "./safe-url";
 import { getDb } from "@/lib/db/client";
 import type {
   SecurityConnectionKind,
@@ -190,7 +191,7 @@ export async function upsertFindingsDetailed(
         f.fixedVersion ?? null,
         f.resource,
         f.cve ?? null,
-        f.url ?? null,
+        safeHttpUrl(f.url),
         JSON.stringify(f.raw ?? {}),
         agentId,
         agentKey,

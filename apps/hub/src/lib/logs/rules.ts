@@ -21,7 +21,7 @@ export type LogRule = {
   alert?: boolean;
 };
 
-/** Built-in log threat pack (auth abuse, shells, miners, webshells, privilege escalation). */
+/** Built-in log threat pack (Phase 7 + Phase 20 intrusion expansion). */
 export const DEFAULT_LOG_RULES: readonly LogRule[] = [
   {
     id: "ssh_failed_password",

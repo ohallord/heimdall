@@ -1,4 +1,4 @@
-# Runbook: bootstrap and enrollment tokens
+# Runbook: bootstrap and enrollment tokens (Phase 32)
 
 All of this lives in **Settings → Agents** (admin; enrollment tokens also for operators).
 

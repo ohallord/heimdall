@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Enable the Heimdall OTel collector on an existing Helm release.
+# Enable the Heimdall OTel collector on an existing Helm release (Phase 27 chart).
 #
 #   OTEL_TOKEN_FILE=~/hdo.txt ./scripts/install-otel-k8s.sh
 #

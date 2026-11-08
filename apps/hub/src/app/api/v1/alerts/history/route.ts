@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http-guard/api-error";
 import { serializeAlertEvent } from "@/lib/alerts/serialize";
 import { requireSession } from "@/lib/auth/session";
 import { listAlertEvents } from "@/lib/db/store";
@@ -38,10 +39,6 @@ export async function GET(request: Request) {
       events: events.map((e) => serializeAlertEvent(e)),
     });
   } catch (err) {
-    const status = (err as { status?: number }).status ?? 500;
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "error" },
-      { status },
-    );
+    return apiError(err);
   }
 }

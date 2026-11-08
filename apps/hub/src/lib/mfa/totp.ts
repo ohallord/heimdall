@@ -18,14 +18,20 @@ export function generateTotpSecret(email: string, issuer = "Heimdall"): {
 }
 
 export function verifyTotp(secret: string, token: string): boolean {
+  return totpStep(secret, token) !== null;
+}
+
+/** The 30s time step the code belongs to (window ±1), or null if invalid. Used to block replay. */
+export function totpStep(secret: string, token: string, now = Date.now()): number | null {
   const totp = new OTPAuth.TOTP({
     algorithm: "SHA1",
     digits: 6,
     period: 30,
     secret: OTPAuth.Secret.fromBase32(secret),
   });
-  const delta = totp.validate({ token: token.replace(/\s+/g, ""), window: 1 });
-  return delta !== null;
+  const delta = totp.validate({ token: token.replace(/\s+/g, ""), window: 1, timestamp: now });
+  if (delta === null) return null;
+  return Math.floor(now / 30_000) + delta;
 }
 
 export function generateRecoveryCodes(count = 10): string[] {

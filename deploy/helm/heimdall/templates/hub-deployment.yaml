@@ -21,14 +21,22 @@ spec:
         - name: hub
           image: {{ .Values.image.hub }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Image runs as nextjs (uid 1001); numeric uid so the kubelet can verify runAsNonRoot.
+          # Root FS is read-only; Next.js writes only to /tmp and .next/cache (emptyDirs below).
+          securityContext:
+            {{- include "heimdall.containerSecurityContext" (dict "uid" 1001 "readOnly" true "override" (dig "containerSecurityContext" (dict) .Values.hub)) | nindent 12 }}
           ports:
             - containerPort: {{ .Values.hub.service.port }}
               name: http
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
           env:
             {{- include "heimdall.bootstrapTokenEnv" . | nindent 12 }}
             {{- include "heimdall.secretKeyEnv" . | nindent 12 }}
-            - name: HEIMDALL_SESSION_SECRET
-              value: {{ .Values.hub.env.HEIMDALL_SESSION_SECRET | quote }}
+            {{- include "heimdall.sessionSecretEnv" . | nindent 12 }}
             - name: HEIMDALL_PUBLIC_URL
               value: {{ .Values.hub.env.HEIMDALL_PUBLIC_URL | quote }}
             - name: HEIMDALL_RP_ID
@@ -48,9 +56,19 @@ spec:
             - name: HOSTNAME
               value: "0.0.0.0"
             {{- if .Values.postgres.enabled }}
+            # Password stays in a Secret; k8s expands $(HEIMDALL_DB_PASSWORD) into the URL (must be URL-safe).
+            - name: HEIMDALL_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- include "heimdall.postgresPasswordRef" . | nindent 18 }}
             - name: DATABASE_URL
-              value: postgres://{{ .Values.postgres.auth.username }}:{{ .Values.postgres.auth.password }}@{{ include "heimdall.name" . }}-postgres:5432/{{ .Values.postgres.auth.database }}?sslmode=disable
+              value: postgres://{{ .Values.postgres.auth.username }}:$(HEIMDALL_DB_PASSWORD)@{{ include "heimdall.name" . }}-postgres:5432/{{ .Values.postgres.auth.database }}?sslmode=disable
             {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

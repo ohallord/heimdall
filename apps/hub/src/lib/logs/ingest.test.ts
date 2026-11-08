@@ -114,7 +114,7 @@ describe("log ingest + search", () => {
       lines: [
         {
           source: "journald",
-          line: `{"_CMDLINE":"sudo TOKEN=${token} bash","MESSAGE":"alice : TTY=/dev/pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/bash","SYSLOG_IDENTIFIER":"sudo"} sudo: alice : TTY=/dev/pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/bash`,
+          line: `{"_CMDLINE":"sudo TOKEN=${token} bash","MESSAGE":"dan : TTY=/dev/pts/0 ; PWD=/home/dan ; USER=root ; COMMAND=/usr/bin/bash","SYSLOG_IDENTIFIER":"sudo"} sudo: dan : TTY=/dev/pts/0 ; PWD=/home/dan ; USER=root ; COMMAND=/usr/bin/bash`,
         },
       ],
     });

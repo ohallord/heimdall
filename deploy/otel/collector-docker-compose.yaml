@@ -15,7 +15,10 @@
 #     ports: ["127.0.0.1:4317:4317", "127.0.0.1:4318:4318"]   # app OTLP traces
 
 receivers:
-  # Apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
+  # Phase 29: apps send OTLP traces here (OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4318).
+  # Unauthenticated receiver. 0.0.0.0 is the container's own network namespace (Docker's port
+  # forward needs it); host exposure is loopback only: publish as 127.0.0.1:4317/4318 (as
+  # scripts/install-otelcol-docker.sh does). Never publish these ports on all interfaces.
   otlp:
     protocols:
       grpc:

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { resetDbForTests } from "@/lib/db/client";
+import { getDb, resetDbForTests } from "@/lib/db/client";
 import {
   createOrgAndAdmin,
   createAgentToken,
@@ -14,6 +14,12 @@ function requestWithToken(token?: string): Request {
     method: "POST",
     headers,
   });
+}
+
+
+// Legacy agents registered before per-agent secrets existed: no secret_hash.
+async function makeLegacy(agentId: string) {
+  await (await getDb()).query(`UPDATE agents SET secret_hash = NULL WHERE id = $1`, [agentId]);
 }
 
 describe("authorizeAgentIngest", () => {
@@ -41,7 +47,7 @@ describe("authorizeAgentIngest", () => {
     expect(result.status).toBe(401);
   });
 
-  it("accepts bootstrap token for matching agent", async () => {
+  it("accepts bootstrap token for a matching legacy agent", async () => {
     const reg = await registerAgentPersistent({
       token: "test-token",
       hostname: "edge-01",
@@ -49,6 +55,7 @@ describe("authorizeAgentIngest", () => {
     });
     expect(reg.ok).toBe(true);
     if (!reg.ok) return;
+    await makeLegacy(reg.agent.id);
 
     const result = await authorizeAgentIngest(
       requestWithToken("test-token"),
@@ -59,7 +66,7 @@ describe("authorizeAgentIngest", () => {
     expect(result.agent.id).toBe(reg.agent.id);
   });
 
-  it("accepts minted agent token for same org", async () => {
+  it("accepts minted agent token for a legacy agent in the same org", async () => {
     const { org, user } = await createOrgAndAdmin({
       orgName: "Ops",
       adminName: "Admin",
@@ -78,6 +85,7 @@ describe("authorizeAgentIngest", () => {
     });
     expect(reg.ok).toBe(true);
     if (!reg.ok) return;
+    await makeLegacy(reg.agent.id);
 
     const result = await authorizeAgentIngest(
       requestWithToken(token),

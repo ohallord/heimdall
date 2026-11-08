@@ -10,7 +10,7 @@ import (
 func TestClientRegisterAndHeartbeat(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Service: "heimdall-hub"})
+		_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Service: "heimdall-hub", Phase: 0})
 	})
 	mux.HandleFunc("/api/v1/agents/register", func(w http.ResponseWriter, r *http.Request) {
 		if auth := r.Header.Get("Authorization"); auth != "" {
