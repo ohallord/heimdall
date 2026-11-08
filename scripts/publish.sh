@@ -297,13 +297,32 @@ log "gitleaks v${GITLEAKS_VERSION}: clean"
 # Build/test from snapshot
 if [[ "$RUN_TESTS" -eq 1 ]]; then
   log "running snapshot tests…"
-  (
-    cd "$SNAPSHOT_DIR/apps/hub"
-    npm ci
-    npm run lint
-    npm test
-    npm run build
-  )
+  if command -v npm >/dev/null 2>&1; then
+    (
+      cd "$SNAPSHOT_DIR/apps/hub"
+      npm ci
+      npm run lint
+      npm test
+      npm run build
+    )
+  else
+    # Same Node major as .github/workflows/publish.yml and apps/hub/Dockerfile.
+    # Runs as the calling user so the snapshot cleanup can delete node_modules/.next.
+    # apparmor=unconfined: on Ubuntu 26.04 the docker-default profile denies node's
+    # TERM/KILL to its own vitest fork workers ("kill EACCES"), failing every run.
+    node_image="${PUBLISH_NODE_IMAGE:-node:22-bookworm}"
+    log "npm not on PATH; running hub checks in ${node_image}"
+    docker run --rm \
+      --security-opt apparmor=unconfined \
+      --user "$(id -u):$(id -g)" \
+      -e HOME=/tmp \
+      -e npm_config_cache=/tmp/npm-cache \
+      -e NEXT_TELEMETRY_DISABLED=1 \
+      -v "$SNAPSHOT_DIR:/snap" \
+      -w /snap/apps/hub \
+      "$node_image" \
+      sh -c 'npm ci && npm run lint && npm test && npm run build'
+  fi
   # Same toolchain as .github/workflows/publish.yml. The homelab has
   # Docker (gitleaks already required it) and often no host Go.
   if command -v go >/dev/null 2>&1; then
