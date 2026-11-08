@@ -6,7 +6,8 @@ import { resetDbForTests } from "@/lib/db/client";
 import { ingestAgentMetrics } from "@/lib/metrics/ingest";
 import type { ContainerMetric, K8sPodMetric } from "@/lib/db/types";
 import { POST } from "@/app/mcp/route";
-import { authorizeMcpRequest, MCP_WWW_AUTHENTICATE } from "./auth";
+import { wwwAuthenticate } from "./oauth";
+import { authorizeMcpRequest } from "./auth";
 import { createHeimdallMcpServer, HEIMDALL_MCP_TOOLS } from "./server";
 
 const SENSITIVE_KEY = /token|secret|authorization/i;
@@ -147,21 +148,27 @@ describe("heimdall mcp", () => {
     expect(unset.ok).toBe(false);
     if (!unset.ok) {
       expect(unset.response.status).toBe(401);
-      expect(unset.response.headers.get("WWW-Authenticate")).toBe(MCP_WWW_AUTHENTICATE);
+      expect(unset.response.headers.get("WWW-Authenticate")).toBe(
+        wwwAuthenticate(new Request("http://hub.example/mcp")),
+      );
     }
 
     const cookieOnly = await POST(
       mcpRequest("http://hub.example/mcp", { cookie: "heimdall_session=not-a-bearer" }),
     );
     expect(cookieOnly.status).toBe(401);
-    expect(cookieOnly.headers.get("WWW-Authenticate")).toBe(MCP_WWW_AUTHENTICATE);
+    expect(cookieOnly.headers.get("WWW-Authenticate")).toBe(
+      wwwAuthenticate(mcpRequest("http://hub.example/mcp", {})),
+    );
 
     process.env.HEIMDALL_MCP_TOKEN = "correct-token-value";
     const wrong = await POST(
       mcpRequest("http://127.0.0.1/mcp", { authorization: "Bearer wrong" }),
     );
     expect(wrong.status).toBe(401);
-    expect(wrong.headers.get("WWW-Authenticate")).toBe(MCP_WWW_AUTHENTICATE);
+    expect(wrong.headers.get("WWW-Authenticate")).toBe(
+      wwwAuthenticate(mcpRequest("http://127.0.0.1/mcp", {})),
+    );
 
     const right = await POST(
       mcpRequest("http://127.0.0.1/mcp", { authorization: "Bearer correct-token-value" }, {

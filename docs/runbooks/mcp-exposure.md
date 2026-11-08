@@ -2,7 +2,7 @@
 
 The hub serves a read-only MCP endpoint at `/mcp` (streamable HTTP, one JSON-RPC call per POST). It reports fleet state. It cannot mute, dismiss, enroll, or change anything. Dashboard session cookies do not authorize it.
 
-The LAN keeps using the hub URL for the dashboard, agents, and `/api/v1`. This runbook is only for publishing `/mcp` on a public name. Tool results leave the homelab and are sent to the model connected to that endpoint.
+The LAN keeps using the hub URL for the dashboard, agents, and `/api/v1`. This runbook publishes `/mcp` plus the OAuth routes Grok uses (`/oauth/` and `/.well-known/oauth-`). Tool results leave the homelab and are sent to the model connected to that endpoint. Grok does not send the static bearer. It opens `/oauth/authorize` in the browser. Sign in with the hub email, password, and authenticator code when MFA is enrolled.
 
 The owner runs `scripts/expose-mcp.py`. CI must not.
 
@@ -39,7 +39,7 @@ HEIMDALL_MCP_HOSTNAME=mcp.example.com python3 scripts/expose-mcp.py
 
 ## Ingress
 
-The tunnel named `heimdall-mcp` allows only the path regex `^/mcp`. Every other path, including `/api/v1`, `/dashboard`, and `/health`, is `http_status:404`.
+The tunnel named `heimdall-mcp` allows `^/mcp`, `^/oauth/`, and `^/.well-known/oauth-`. Every other path, including `/api/v1`, `/dashboard`, and `/health`, is `http_status:404`. After this list changes, run `--apply` again so the live tunnel picks it up.
 
 ## Apply
 

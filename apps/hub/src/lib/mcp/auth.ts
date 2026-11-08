@@ -1,7 +1,5 @@
 import { safeEqual } from "@/lib/http-guard/compare";
-
-/** Realm advertised on every 401 from `/mcp`. */
-export const MCP_WWW_AUTHENTICATE = 'Bearer realm="heimdall"';
+import { accessTokenOk, wwwAuthenticate } from "@/lib/mcp/oauth";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -71,26 +69,27 @@ export function authorizeMcpRequest(
   const hostname = requestHostname(request);
 
   if (!expected) {
-    if (!isLocalHost(hostname)) return { ok: false, response: unauthorized() };
+    if (!isLocalHost(hostname)) return { ok: false, response: unauthorized(request) };
     return { ok: true };
   }
 
   const allow = allowedHosts(env);
-  if (allow && !allow.has(hostname)) return { ok: false, response: unauthorized() };
+  if (allow && !allow.has(hostname)) return { ok: false, response: unauthorized(request) };
 
   const presented = presentedBearer(request);
+  if (presented && accessTokenOk(presented)) return { ok: true };
   if (!presented || !safeEqual(presented, expected)) {
-    return { ok: false, response: unauthorized() };
+    return { ok: false, response: unauthorized(request) };
   }
   return { ok: true };
 }
 
-export function unauthorized(): Response {
+export function unauthorized(request: Request): Response {
   return new Response(JSON.stringify({ error: "unauthorized" }), {
     status: 401,
     headers: {
       "content-type": "application/json",
-      "WWW-Authenticate": MCP_WWW_AUTHENTICATE,
+      "WWW-Authenticate": wwwAuthenticate(request),
       "cache-control": "no-store",
     },
   });
