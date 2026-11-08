@@ -78,4 +78,8 @@ if grep -rqF "heimdall-dev-""session-secret" "$SNAP" --exclude-dir=node_modules;
   echo "snapshot ships the dev session secret" >&2; exit 1
 fi
 
+# The hostname test exercises the unpublished operator script and names the operator's
+# domain and public IP; it must never ship.
+[[ ! -e "$SNAP/scripts/tests/test-setup-hostname.sh" ]] || { echo "snapshot ships test-setup-hostname.sh" >&2; exit 1; }
+
 echo "test-publish-gates: ok"
