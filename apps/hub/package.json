@@ -16,7 +16,7 @@
     "@simplewebauthn/types": "^12.0.0",
     "bcryptjs": "^3.0.3",
     "iron-session": "^9.0.1",
-    "jose": "^6.2.14",
+    "jose": "^6.2.15",
     "nanoid": "^6.0.2",
     "next": "^16.4.2",
     "nodemailer": "^10.1.7",
