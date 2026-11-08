@@ -45,3 +45,18 @@ describe("fetchers accept URL-form names", () => {
     ).rejects.toThrow(/gitlab project not found: grp\/app/);
   });
 });
+
+// Bug: GitHub answered 403 "Please make sure your request has a User-Agent
+// header" because the hub sent none.
+describe("GitHub requests send a User-Agent", () => {
+  it.each(["fetchGitHubDependabotAlerts", "fetchGitHubOrgAdvisories"] as const)(
+    "%s",
+    async (name) => {
+      const gh = await import("./github");
+      const fetchMock = vi.fn(async () => new Response("[]", { status: 200 }));
+      await gh[name]({ token: "t", org: "acme", fetchImpl: fetchMock as unknown as typeof fetch });
+      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect(new Headers(init.headers).get("user-agent")).toMatch(/^heimdall-hub/);
+    },
+  );
+});

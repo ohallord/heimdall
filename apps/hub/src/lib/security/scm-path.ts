@@ -11,3 +11,13 @@ export function normalizeScmPath(kind: "github" | "gitlab", raw: string): string
   s = s.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
   return kind === "github" ? s.split("/")[0] : s;
 }
+
+/** An SCM API call that returned a non-2xx status (or GitLab's "no such project", as 404). */
+export class ScmHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}

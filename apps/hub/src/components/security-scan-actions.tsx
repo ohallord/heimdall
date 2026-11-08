@@ -2,17 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { syncSummary } from "@/lib/security/sync-summary";
 
 export function SecurityScanActions() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   async function syncRemotes() {
     setBusy(true);
     setError(null);
     setMessage(null);
+    setWarnings([]);
     try {
       const res = await fetch("/api/v1/security/scan", {
         method: "POST",
@@ -27,10 +30,9 @@ export function SecurityScanActions() {
             : JSON.stringify(data.error ?? res.statusText),
         );
       }
-      setMessage(
-        `Synced ${data.written ?? 0} finding(s)` +
-          (data.errors?.length ? ` · ${data.errors.length} warning(s)` : ""),
-      );
+      const summary = syncSummary(data);
+      setMessage(summary.message);
+      setWarnings(summary.warnings);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "sync failed");
@@ -54,6 +56,13 @@ export function SecurityScanActions() {
       </p>
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       {message ? <p className="text-sm text-ok">{message}</p> : null}
+      {warnings.length ? (
+        <ul className="space-y-1 font-mono text-xs text-warn">
+          {warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

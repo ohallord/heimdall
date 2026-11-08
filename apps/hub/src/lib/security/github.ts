@@ -1,5 +1,5 @@
 import { normalizeSeverity, type NormalizedFinding } from "./types";
-import { normalizeScmPath } from "./scm-path";
+import { normalizeScmPath, ScmHttpError } from "./scm-path";
 import { guardedFetch } from "@/lib/http-guard/safe-fetch";
 
 type DependabotAlert = {
@@ -113,12 +113,13 @@ export async function fetchGitHubDependabotAlerts(input: {
         accept: "application/vnd.github+json",
         authorization: `Bearer ${input.token}`,
         "x-github-api-version": "2022-11-28",
+        "user-agent": "heimdall-hub",
       },
     },
   );
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`github dependabot ${res.status}: ${text.slice(0, 200)}`);
+    throw new ScmHttpError(`github dependabot ${res.status}: ${text.slice(0, 200)}`, res.status);
   }
   return res.json();
 }
@@ -138,12 +139,100 @@ export async function fetchGitHubOrgAdvisories(input: {
         accept: "application/vnd.github+json",
         authorization: `Bearer ${input.token}`,
         "x-github-api-version": "2022-11-28",
+        "user-agent": "heimdall-hub",
       },
     },
   );
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`github advisories ${res.status}: ${text.slice(0, 200)}`);
+    throw new ScmHttpError(`github advisories ${res.status}: ${text.slice(0, 200)}`, res.status);
   }
   return res.json();
+}
+
+type FetchOpts = { token: string; apiBaseUrl?: string; fetchImpl?: typeof fetch };
+
+async function githubGet(opts: FetchOpts, path: string, label: string): Promise<unknown> {
+  const base = (opts.apiBaseUrl ?? "https://api.github.com").replace(/\/$/, "");
+  const fetchFn = opts.fetchImpl ?? guardedFetch;
+  const res = await fetchFn(`${base}${path}`, {
+    headers: {
+      accept: "application/vnd.github+json",
+      authorization: `Bearer ${opts.token}`,
+      "x-github-api-version": "2022-11-28",
+      "user-agent": "heimdall-hub",
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new ScmHttpError(`${label} ${res.status}: ${text.slice(0, 200)}`, res.status);
+  }
+  return res.json();
+}
+
+type RepoRow = { full_name?: string; owner?: { login?: string }; archived?: boolean };
+
+/** Non-archived repos owned by `owner` (first 100). Private ones when the token is that user's. */
+export async function fetchGitHubOwnerRepos(opts: FetchOpts & { owner: string }): Promise<string[]> {
+  const pick = (rows: unknown) =>
+    (Array.isArray(rows) ? (rows as RepoRow[]) : [])
+      .filter((r) => !r.archived && r.full_name)
+      .filter((r) => (r.owner?.login ?? "").toLowerCase() === opts.owner.toLowerCase())
+      .map((r) => r.full_name!);
+  const mine = pick(
+    await githubGet(opts, "/user/repos?affiliation=owner&per_page=100", "github repos"),
+  );
+  if (mine.length) return mine;
+  return pick(
+    await githubGet(
+      opts,
+      `/users/${encodeURIComponent(opts.owner)}/repos?type=owner&per_page=100`,
+      "github repos",
+    ),
+  );
+}
+
+/**
+ * Dependabot (and org advisories) for an org; for a personal account the org
+ * endpoints 404, so walk the user's repos instead. Repos with Dependabot off are skipped.
+ */
+export async function syncGitHubAccount(
+  opts: FetchOpts & { name: string },
+): Promise<{ findings: NormalizedFinding[]; warnings: string[] }> {
+  const name = normalizeScmPath("github", opts.name);
+  const warnings: string[] = [];
+  try {
+    const alerts = await fetchGitHubDependabotAlerts({ ...opts, org: name });
+    const findings = parseGitHubDependabotAlerts(alerts, name);
+    try {
+      findings.push(...parseGitHubOrgAdvisories(await fetchGitHubOrgAdvisories({ ...opts, org: name }), name));
+    } catch (err) {
+      // Org advisories may require extra permissions; Dependabot still counts.
+      warnings.push(`github advisories ${name}: ${err instanceof Error ? err.message : "failed"}`);
+    }
+    return { findings, warnings };
+  } catch (err) {
+    if (!(err instanceof ScmHttpError && err.status === 404)) throw err;
+  }
+
+  const findings: NormalizedFinding[] = [];
+  for (const repo of await fetchGitHubOwnerRepos({ ...opts, owner: name })) {
+    try {
+      const alerts = await githubGet(
+        opts,
+        `/repos/${repo.split("/").map(encodeURIComponent).join("/")}/dependabot/alerts?state=open&per_page=100`,
+        `github dependabot ${repo}`,
+      );
+      for (const f of parseGitHubDependabotAlerts(alerts, repo)) {
+        if (!f.resource.startsWith(`${repo}/`)) f.resource = `${repo}/${f.resource}`;
+        findings.push(f);
+      }
+    } catch (err) {
+      const off =
+        err instanceof ScmHttpError &&
+        (err.status === 404 || (err.status === 403 && /disabled/i.test(err.message)));
+      if (!off) warnings.push(err instanceof Error ? err.message : `github dependabot ${repo} failed`);
+    }
+  }
+  return { findings, warnings };
 }

@@ -1,13 +1,5 @@
-import {
-  fetchGitHubDependabotAlerts,
-  fetchGitHubOrgAdvisories,
-  parseGitHubDependabotAlerts,
-  parseGitHubOrgAdvisories,
-} from "./github";
-import {
-  fetchGitLabVulnerabilities,
-  parseGitLabVulnerabilities,
-} from "./gitlab";
+import { syncGitHubAccount } from "./github";
+import { syncGitLabPath } from "./gitlab";
 import { parseOsvScannerReport } from "./osv";
 import { listSecurityConnections, upsertFindings } from "./store";
 import { parseTrivyReport } from "./trivy";
@@ -80,48 +72,19 @@ export async function ingestSecurityScan(
         continue;
       }
       try {
+        const apiBaseUrl =
+          typeof config.apiBaseUrl === "string" ? config.apiBaseUrl : undefined;
         if (conn.kind === "github") {
-          const org =
-            (typeof config.org === "string" && config.org) || conn.name;
-          const apiBaseUrl =
-            typeof config.apiBaseUrl === "string"
-              ? config.apiBaseUrl
-              : undefined;
-          const dependabot = await fetchGitHubDependabotAlerts({
-            token,
-            org,
-            apiBaseUrl,
-          });
-          collected.push(...parseGitHubDependabotAlerts(dependabot, org));
-          try {
-            const advisories = await fetchGitHubOrgAdvisories({
-              token,
-              org,
-              apiBaseUrl,
-            });
-            collected.push(...parseGitHubOrgAdvisories(advisories, org));
-          } catch (err) {
-            // Org advisories may require extra permissions; Dependabot still counts.
-            errors.push(
-              `github advisories ${org}: ${err instanceof Error ? err.message : "failed"}`,
-            );
-          }
+          const name = (typeof config.org === "string" && config.org) || conn.name;
+          const r = await syncGitHubAccount({ token, name, apiBaseUrl });
+          collected.push(...r.findings);
+          errors.push(...r.warnings.map((w) => `${conn.kind}:${conn.name}: ${w}`));
         } else if (conn.kind === "gitlab") {
-          const projectPath =
-            (typeof config.projectPath === "string" && config.projectPath) ||
-            conn.name;
-          const apiBaseUrl =
-            typeof config.apiBaseUrl === "string"
-              ? config.apiBaseUrl
-              : undefined;
-          const payload = await fetchGitLabVulnerabilities({
-            token,
-            projectPath,
-            apiBaseUrl,
-          });
-          collected.push(
-            ...parseGitLabVulnerabilities(payload, projectPath),
-          );
+          const path =
+            (typeof config.projectPath === "string" && config.projectPath) || conn.name;
+          const r = await syncGitLabPath({ token, path, apiBaseUrl });
+          collected.push(...r.findings);
+          errors.push(...r.warnings.map((w) => `${conn.kind}:${conn.name}: ${w}`));
         }
       } catch (err) {
         errors.push(
@@ -131,6 +94,7 @@ export async function ingestSecurityScan(
     }
   }
 
+  for (const e of errors) console.warn(`[security-sync] org=${input.orgId} ${e}`);
   const written = await upsertFindings(input.orgId, collected);
   return { written, bySource: countBySource(collected), errors };
 }
