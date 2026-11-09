@@ -1,6 +1,14 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { listAgents } from "@/lib/agents";
-import { getPrimaryOrg, getSetupState, listAlertEvents, listAlertRules } from "@/lib/db/store";
+import { getDb } from "@/lib/db/client";
+import {
+  countOpenAlertsByRule,
+  getOrgWithAdmins,
+  getPrimaryOrg,
+  getSetupState,
+  listAlertEvents,
+  listAlertRules,
+} from "@/lib/db/store";
 import type {
   AlertEventRow,
   ContainersLatestRow,
@@ -16,11 +24,12 @@ import {
   getLatestMetrics,
   isAgentOnline,
 } from "@/lib/metrics/ingest";
+import { redactSecrets } from "@/lib/logs/redact";
 import { listFindings } from "@/lib/security/store";
 
-/** Fleet and MCP lists stay short. Counts use the existing store caps. */
+/** Fleet and MCP lists stay short. Rule counts are not capped by the event page. */
 export const MCP_LIST_CAP = 20;
-const ALERT_COUNT_CAP = 200;
+const RULE_SUMMARY_CAP = 50;
 const FINDING_COUNT_CAP = 500;
 
 const SENSITIVE_KEY =
@@ -66,8 +75,23 @@ function toolError(error: string): CallToolResult {
   };
 }
 
+/**
+ * Org the read-only tools report. Same choice as bootstrap registration
+ * (HEIMDALL_ORG_ID, else the org that has an admin, else the oldest),
+ * without creating an org. An older empty Bootstrap org must not hide the
+ * fleet the wizard actually uses.
+ */
 async function primaryOrg(): Promise<Organization | null> {
-  return getPrimaryOrg();
+  const pinned = process.env.HEIMDALL_ORG_ID?.trim();
+  if (pinned) {
+    const db = await getDb();
+    const byId = await db.query<Organization>(
+      `SELECT * FROM organizations WHERE id = $1 LIMIT 1`,
+      [pinned],
+    );
+    if (byId.rows[0]) return byId.rows[0];
+  }
+  return (await getOrgWithAdmins()) ?? getPrimaryOrg();
 }
 
 function parseJson(raw: string | null | undefined): unknown {
@@ -80,19 +104,16 @@ function parseJson(raw: string | null | undefined): unknown {
 }
 
 function hostnameFromPayload(raw: string): string | null {
-  const parsed = parseJson(raw);
-  if (!parsed || typeof parsed !== "object") return null;
-  const hostname = (parsed as { hostname?: unknown }).hostname;
-  return typeof hostname === "string" && hostname ? hostname : null;
+  return stringField(raw, "hostname");
 }
 
 export async function heimdallStatus(): Promise<CallToolResult> {
   const org = await primaryOrg();
   if (!org) return toolError("no primary org");
-  const [setup, agents, open] = await Promise.all([
+  const [setup, agents, byRule] = await Promise.all([
     getSetupState(),
     listAgents(org.id),
-    listAlertEvents(org.id, { status: "open", limit: ALERT_COUNT_CAP }),
+    countOpenAlertsByRule(org.id),
   ]);
   return toolOk({
     ok: true,
@@ -102,7 +123,7 @@ export async function heimdallStatus(): Promise<CallToolResult> {
       online: agents.filter((agent) => isAgentOnline(agent.lastSeenAt)).length,
       revoked: agents.filter((agent) => Boolean(agent.revokedAt)).length,
     },
-    openAlerts: open.length,
+    openAlerts: byRule.reduce((sum, row) => sum + row.count, 0),
   });
 }
 
@@ -198,16 +219,36 @@ function shapeK8s(row: K8sLatestRow | null): unknown {
   };
 }
 
-export async function heimdallAlerts(): Promise<CallToolResult> {
+export async function heimdallAlerts(args: {
+  rule?: string;
+  host?: string;
+  offset?: number;
+} = {}): Promise<CallToolResult> {
   const org = await primaryOrg();
   if (!org) return toolError("no primary org");
-  const [events, rules] = await Promise.all([
-    listAlertEvents(org.id, { status: "open", limit: MCP_LIST_CAP }),
+  const rule = args.rule?.trim() || undefined;
+  const host = args.host?.trim() || undefined;
+  const offset = Number.isFinite(args.offset)
+    ? Math.max(0, Math.floor(args.offset ?? 0))
+    : 0;
+  const [events, rules, byRule] = await Promise.all([
+    listAlertEvents(org.id, {
+      status: "open",
+      limit: MCP_LIST_CAP,
+      offset,
+      rule,
+      host,
+    }),
     listAlertRules(org.id),
+    countOpenAlertsByRule(org.id),
   ]);
-  const names = new Map(rules.map((rule) => [rule.id, rule.name]));
+  const names = new Map(rules.map((row) => [row.id, row.name]));
+  const summary = byRule.slice(0, RULE_SUMMARY_CAP);
   return toolOk({
     ok: true,
+    open: byRule.reduce((sum, row) => sum + row.count, 0),
+    byRule: summary,
+    ...(byRule.length > summary.length ? { byRuleTruncated: true } : {}),
     alerts: events.map((event) => shapeAlert(event, names)),
   });
 }
@@ -218,9 +259,19 @@ function shapeAlert(event: AlertEventRow, names: Map<string, string>) {
   return {
     rule,
     host: hostnameFromPayload(event.payload_json),
+    source: stringField(event.payload_json, "source"),
     state: event.status,
+    severity: event.severity,
     time: new Date(event.created_at).toISOString(),
+    message: redactSecrets(event.message).slice(0, 300),
   };
+}
+
+function stringField(raw: string, key: string): string | null {
+  const parsed = parseJson(raw);
+  if (!parsed || typeof parsed !== "object") return null;
+  const value = (parsed as Record<string, unknown>)[key];
+  return typeof value === "string" && value ? value : null;
 }
 
 export async function heimdallFindings(): Promise<CallToolResult> {

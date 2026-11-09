@@ -80,6 +80,7 @@ The alarm console: open, muted, recovered and dismissed alerts from metric rules
 - **Recovered** badge: the condition cleared on its own. If the original alarm notified someone, a "Recovered" notice is sent too.
 - **Pause all notifications**: a global kill switch for outbound email, Slack, Discord and SMS. While paused, metric and log rules also **stop opening new alarms**. Existing alarms still auto-recover.
 - **Alert history** with deep links. Notification messages link straight to the alarm.
+- The read-only MCP `heimdall_alerts` tool reports open alarms for the organization that has an admin (or `HEIMDALL_ORG_ID` when that is set). It includes a count per rule and can filter by rule name or host, so one long-running alarm does not hide the others.
 
 ## Settings (`/dashboard/settings`)
 

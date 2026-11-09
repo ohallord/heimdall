@@ -72,10 +72,23 @@ export function createHeimdallMcpServer(): McpServer {
     "heimdall_alerts",
     {
       description:
-        "Read-only open alert events for the primary org (capped): rule, host, state, and time. There is no mute or dismiss.",
+        "Read-only open alert events for the org with an admin (or HEIMDALL_ORG_ID, else the oldest org). Returns open counts by rule plus a page of events: rule, host, source, state, severity, time, and a short message. Optional rule and host are case-insensitive substrings; offset skips matches. There is no mute or dismiss.",
+      inputSchema: {
+        rule: z
+          .string()
+          .optional()
+          .describe('Case-insensitive substring of the rule name, for example "Failed SSH password"'),
+        host: z.string().optional().describe("Case-insensitive substring of the host name"),
+        offset: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("How many matching alerts to skip"),
+      },
       annotations: READ_ONLY,
     },
-    async () => guardTool(() => heimdallAlerts()),
+    async (args) => guardTool(() => heimdallAlerts(args)),
   );
 
   server.registerTool(
