@@ -130,6 +130,8 @@ The OTLP endpoints reject protobuf with `415`. Configure collectors with `encodi
 | --- | --- | --- | --- |
 | POST | `/mcp` | `Authorization: Bearer` `HEIMDALL_MCP_TOKEN` | Stateless streamable HTTP. Tools only report state (`heimdall_status`, `heimdall_agents`, `heimdall_agent`, `heimdall_alerts`, `heimdall_findings`). No writes. Session cookies do not authorize this path. Missing or wrong bearer, or a non-local Host when the token is unset, is `401` with `WWW-Authenticate: Bearer realm="heimdall"`. See [MCP exposure](../runbooks/mcp-exposure.md) |
 
+Tools report `HEIMDALL_ORG_ID` when that org exists, otherwise the org that has an admin, otherwise the oldest org. `heimdall_alerts` returns open counts grouped by rule and one page of events. Optional arguments are `rule` and `host` (case-insensitive substrings) and `offset`. Each event includes severity, source, and a short message. Heimdall tokens in that message are redacted.
+
 ## Backup
 
 | Method | Path | Permission | Notes |

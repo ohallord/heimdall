@@ -1,6 +1,6 @@
 # Runbook: expose the read-only MCP endpoint
 
-The hub serves a read-only MCP endpoint at `/mcp` (streamable HTTP, one JSON-RPC call per POST). It reports fleet state. It cannot mute, dismiss, enroll, or change anything. Dashboard session cookies do not authorize it.
+The hub serves a read-only MCP endpoint at `/mcp` (streamable HTTP, one JSON-RPC call per POST). It reports fleet state for `HEIMDALL_ORG_ID` when that org exists, otherwise the org that has an admin, otherwise the oldest org. It cannot mute, dismiss, enroll, or change anything. Dashboard session cookies do not authorize it. `heimdall_alerts` returns open counts by rule and accepts `rule`, `host`, and `offset` so a flood of one rule does not hide the rest.
 
 The LAN keeps using the hub URL for the dashboard, agents, and `/api/v1`. This runbook publishes `/mcp` plus the OAuth routes Grok uses (`/oauth/` and `/.well-known/oauth-`). Tool results leave the homelab and are sent to the model connected to that endpoint. Grok does not send the static bearer. It opens `/oauth/authorize` in the browser. Sign in with the hub email, password, and authenticator code when MFA is enrolled.
 

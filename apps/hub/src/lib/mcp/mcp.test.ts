@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { registerAgent } from "@/lib/agents";
-import { resetDbForTests } from "@/lib/db/client";
+import { getDb, resetDbForTests } from "@/lib/db/client";
+import { createOrgAndAdmin, insertAlertEvent } from "@/lib/db/store";
+import { newId } from "@/lib/ids";
 import { ingestAgentMetrics } from "@/lib/metrics/ingest";
 import type { ContainerMetric, K8sPodMetric } from "@/lib/db/types";
 import { POST } from "@/app/mcp/route";
@@ -59,6 +61,7 @@ describe("heimdall mcp", () => {
     delete process.env.DATABASE_URL;
     delete process.env.HEIMDALL_MCP_TOKEN;
     delete process.env.HEIMDALL_MCP_ALLOWED_HOSTS;
+    delete process.env.HEIMDALL_ORG_ID;
     resetDbForTests();
   });
 
@@ -215,4 +218,119 @@ describe("heimdall mcp", () => {
     );
     expect(anyHost.ok).toBe(true);
   });
+
+  it("reports the org with an admin, and can filter past a newer flood", async () => {
+    const { org: ops } = await createOrgAndAdmin({
+      orgName: "Heimdall Ops",
+      adminName: "Dan",
+      email: "dan@example.com",
+      password: "CorrectHorse1",
+    });
+    const db = await getDb();
+    const staleId = newId("org");
+    await db.query(`INSERT INTO organizations (id, name) VALUES ($1, $2)`, [
+      staleId,
+      "Bootstrap",
+    ]);
+    await db.query(
+      `UPDATE organizations SET created_at = NOW() - INTERVAL '2 days' WHERE id = $1`,
+      [staleId],
+    );
+    const staleRule = await insertRule(staleId, "K8s API unreachable", "k8s_apiserver_unreachable");
+    await insertAlertEvent({
+      id: newId("evt"),
+      orgId: staleId,
+      ruleId: staleRule,
+      severity: "warning",
+      message: "k8s_apiserver_unreachable gte 1 (observed 1)",
+      payload: { hostname: "compose-agent-01" },
+    });
+
+    const sshRule = await insertRule(ops.id, "Log: Failed SSH password", "log_match:ssh_failed_password");
+    const k8sRule = await insertRule(ops.id, "K8s API unreachable", "k8s_apiserver_unreachable");
+    const sshMessage = "Failed password for root from 203.0.113.50 port 22 ssh2";
+    const leaked = `${sshMessage} hdt_abcdefghijklmnopqrstuvwxyz`;
+    await insertAlertEvent({
+      id: newId("evt"),
+      orgId: ops.id,
+      ruleId: sshRule,
+      severity: "warning",
+      message: leaked,
+      payload: { hostname: "edge-01", source: "sshd.service" },
+    });
+    for (let i = 0; i < 21; i += 1) {
+      await insertAlertEvent({
+        id: newId("evt"),
+        orgId: ops.id,
+        ruleId: k8sRule,
+        severity: "warning",
+        message: "k8s_apiserver_unreachable gte 1 (observed 1)",
+        payload: { hostname: "compose-agent-01" },
+      });
+    }
+
+    const page = await alertPayload({});
+    expect(page.open).toBe(22);
+    expect(page.alerts).toHaveLength(20);
+    expect(page.alerts.every((alert) => alert.rule === "K8s API unreachable")).toBe(true);
+    expect(page.byRule).toEqual([
+      { rule: "K8s API unreachable", count: 21 },
+      { rule: "Log: Failed SSH password", count: 1 },
+    ]);
+
+    const ssh = await alertPayload({ rule: "Failed SSH", host: "edge-01" });
+    expect(ssh.alerts).toHaveLength(1);
+    expect(ssh.alerts[0]?.host).toBe("edge-01");
+    expect(ssh.alerts[0]?.source).toBe("sshd.service");
+    expect(ssh.alerts[0]?.message).toContain("203.0.113.50");
+    expect(ssh.alerts[0]?.message).not.toContain("abcdefghijklmnopqrstuvwxyz");
+    expect(ssh.alerts[0]?.message).toContain("hdt_[REDACTED]");
+
+    process.env.HEIMDALL_ORG_ID = staleId;
+    const pinned = await alertPayload({ rule: "K8s" });
+    expect(pinned.open).toBe(1);
+    expect(pinned.alerts[0]?.host).toBe("compose-agent-01");
+  });
 });
+
+async function insertRule(orgId: string, name: string, metric: string): Promise<string> {
+  const db = await getDb();
+  const id = newId("rul");
+  await db.query(
+    `INSERT INTO alert_rules (
+       id, org_id, name, metric, operator, threshold, enabled
+     ) VALUES ($1, $2, $3, $4, 'gte', 1, TRUE)`,
+    [id, orgId, name, metric],
+  );
+  return id;
+}
+
+async function alertPayload(args: {
+  rule?: string;
+  host?: string;
+  offset?: number;
+}): Promise<{
+  open: number;
+  byRule: Array<{ rule: string; count: number }>;
+  alerts: Array<{
+    rule: string;
+    host: string | null;
+    source: string | null;
+    message: string;
+  }>;
+}> {
+  const result = await withClient((client) =>
+    client.callTool({ name: "heimdall_alerts", arguments: args }),
+  );
+  const text = result.content?.find((part) => part.type === "text")?.text ?? "";
+  return JSON.parse(text) as {
+    open: number;
+    byRule: Array<{ rule: string; count: number }>;
+    alerts: Array<{
+      rule: string;
+      host: string | null;
+      source: string | null;
+      message: string;
+    }>;
+  };
+}
