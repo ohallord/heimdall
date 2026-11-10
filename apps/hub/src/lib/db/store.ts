@@ -390,21 +390,10 @@ export async function updateAlertRuleThresholds(input: {
 
 export type ListAlertEventsOptions = {
   limit?: number;
-  /** Skip this many matching rows (newest first). */
-  offset?: number;
   /** Filter by status; omit for all. `open` includes expired mutes (reopened). */
   status?: AlertEventStatus | "open_queue";
   id?: string;
-  /** Case-insensitive substring of `alert_rules.name`. */
-  rule?: string;
-  /** Case-insensitive substring of the hostname stored on the event payload. */
-  host?: string;
 };
-
-/** Escape LIKE/ILIKE wildcards so a search string matches literally. */
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => "\\" + c);
-}
 
 /** Reopen muted alerts whose mute window has elapsed. */
 export async function reopenExpiredMutes(
@@ -431,76 +420,34 @@ export async function listAlertEvents(
   const opts: ListAlertEventsOptions =
     typeof limitOrOpts === "number" ? { limit: limitOrOpts } : limitOrOpts;
   const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
-  const offset = Math.min(10_000, Math.max(0, Math.floor(opts.offset ?? 0)));
   await reopenExpiredMutes(orgId);
 
   const db = await getDb();
   const params: unknown[] = [orgId];
-  const clauses = ["e.org_id = $1"];
+  const clauses = ["org_id = $1"];
 
   if (opts.id) {
     params.push(opts.id);
-    clauses.push(`e.id = $${params.length}`);
+    clauses.push(`id = $${params.length}`);
   }
 
   if (opts.status === "open_queue") {
     // Open queue: open + currently muted (still visible until dismiss/expiry reopen)
-    clauses.push(`e.status IN ('open', 'muted')`);
+    clauses.push(`status IN ('open', 'muted')`);
   } else if (opts.status) {
     params.push(opts.status);
-    clauses.push(`e.status = $${params.length}`);
-  }
-
-  const rule = opts.rule?.trim();
-  const join = rule
-    ? "INNER JOIN alert_rules r ON r.id = e.rule_id AND r.org_id = e.org_id"
-    : "";
-  if (rule) {
-    params.push(`%${escapeLike(rule)}%`);
-    clauses.push(`r.name ILIKE $${params.length} ESCAPE '\\'`);
-  }
-
-  const host = opts.host?.trim();
-  if (host) {
-    params.push(`%"hostname":"%${escapeLike(host)}%`);
-    clauses.push(`e.payload_json ILIKE $${params.length} ESCAPE '\\'`);
+    clauses.push(`status = $${params.length}`);
   }
 
   params.push(limit);
-  const limitParam = params.length;
-  params.push(offset);
-
   const result = await db.query<AlertEventRow>(
-    `SELECT e.* FROM alert_events e
-     ${join}
+    `SELECT * FROM alert_events
      WHERE ${clauses.join(" AND ")}
-     ORDER BY e.created_at DESC
-     LIMIT $${limitParam} OFFSET $${params.length}`,
+     ORDER BY created_at DESC
+     LIMIT $${params.length}`,
     params,
   );
   return result.rows;
-}
-
-/** Open-event counts by rule name. Not capped, so one noisy rule cannot hide another. */
-export async function countOpenAlertsByRule(
-  orgId: string,
-): Promise<Array<{ rule: string; count: number }>> {
-  await reopenExpiredMutes(orgId);
-  const db = await getDb();
-  const result = await db.query<{ rule: string; count: number | string }>(
-    `SELECT COALESCE(r.name, e.rule_id, 'unknown') AS rule,
-            COUNT(*)::int AS count
-     FROM alert_events e
-     LEFT JOIN alert_rules r ON r.id = e.rule_id
-     WHERE e.org_id = $1 AND e.status = 'open'
-     GROUP BY 1
-     ORDER BY COUNT(*) DESC, rule ASC`,
-    [orgId],
-  );
-  return result.rows.map((row) => ({
-    rule: row.rule,
-    count: Number(row.count),
-  }));
 }
 
 export async function getAlertEvent(

@@ -2,10 +2,6 @@
 
 ## Unreleased
 
-### Fixed
-
-- MCP tools follow the org that has an admin (or `HEIMDALL_ORG_ID`), and `heimdall_alerts` can filter by rule and host and returns open counts by rule.
-
 ### Added
 
 - Private→public publish pipeline (`.publish/`, `scripts/publish.sh`) with fail-closed allowlist, replace map, denylist gates, and dry-run default.
