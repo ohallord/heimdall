@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { githubCodeLineUrlFromJson } from "@/lib/security/github";
 import { safeHttpUrl } from "@/lib/security/safe-url";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { SecurityScanActions } from "@/components/security-scan-actions";
 import { getSession } from "@/lib/auth/session";
 import { isSetupComplete } from "@/lib/db/store";
-import type { VulnSource } from "@/lib/db/types";
+import type { VulnFindingRow, VulnSource } from "@/lib/db/types";
 import { listFindings, listSecurityConnections } from "@/lib/security/store";
 
 export const dynamic = "force-dynamic";
@@ -213,16 +214,7 @@ export default async function SecurityPage({
                       : "—"}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-muted">
-                    {f.agent_id ? (
-                      <Link
-                        href={`/dashboard/hosts/${f.agent_id}`}
-                        className="text-signal underline"
-                      >
-                        {f.resource ?? f.agent_id}
-                      </Link>
-                    ) : (
-                      (f.resource ?? "—")
-                    )}
+                    <ResourceLink finding={f} />
                   </td>
                 </tr>
               ))}
@@ -232,6 +224,31 @@ export default async function SecurityPage({
       </section>
     </main>
   );
+}
+
+function ResourceLink({ finding }: { finding: VulnFindingRow }) {
+  const codeLine = safeHttpUrl(
+    githubCodeLineUrlFromJson({
+      source: finding.source,
+      resource: finding.resource,
+      rawJson: finding.raw_json,
+    }),
+  );
+  if (finding.agent_id) {
+    return (
+      <Link href={`/dashboard/hosts/${finding.agent_id}`} className="text-signal underline">
+        {finding.resource ?? finding.agent_id}
+      </Link>
+    );
+  }
+  if (codeLine) {
+    return (
+      <a href={codeLine} className="text-signal underline" target="_blank" rel="noreferrer">
+        {finding.resource}
+      </a>
+    );
+  }
+  return <>{finding.resource ?? "—"}</>;
 }
 
 function Tile({

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { githubCodeLineUrlFromJson } from "@/lib/security/github";
 import { safeHttpUrl } from "@/lib/security/safe-url";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -29,6 +30,14 @@ export default async function FindingDetailPage({
   } catch {
     /* keep raw */
   }
+
+  const codeLine = safeHttpUrl(
+    githubCodeLineUrlFromJson({
+      source: finding.source,
+      resource: finding.resource,
+      rawJson: finding.raw_json,
+    }),
+  );
 
   const canResolve =
     finding.status === "open" &&
@@ -73,7 +82,23 @@ export default async function FindingDetailPage({
           }
         />
         <Field label="Fixed version" value={finding.fixed_version ?? "—"} />
-        <Field label="Resource" value={finding.resource ?? "—"} />
+        <Field
+          label="Resource"
+          value={
+            codeLine ? (
+              <a
+                href={codeLine}
+                className="text-signal underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {finding.resource}
+              </a>
+            ) : (
+              (finding.resource ?? "—")
+            )
+          }
+        />
         <Field
           label="Asset"
           value={

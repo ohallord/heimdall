@@ -34,6 +34,7 @@ type CodeScanningAlert = {
     security_severity_level?: string;
   };
   most_recent_instance?: {
+    commit_sha?: string;
     location?: { path?: string; start_line?: number };
     message?: { text?: string };
   };
@@ -98,6 +99,41 @@ function codeScanningSeverity(alert: CodeScanningAlert): ReturnType<typeof norma
   return "unknown";
 }
 
+/** Blob URL for a code-scanning finding. Uses the scanned commit when we have it, otherwise HEAD. */
+export function githubCodeLineUrl(input: {
+  source: string;
+  resource?: string | null;
+  raw?: unknown;
+}): string | null {
+  if (input.source !== "github" || !input.raw || typeof input.raw !== "object") return null;
+  const raw = input.raw as { path?: unknown; line?: unknown; commit?: unknown };
+  const path = typeof raw.path === "string" ? raw.path.replace(/^\/+/, "") : "";
+  const line = typeof raw.line === "number" ? raw.line : Number.NaN;
+  if (!path || path.includes("..") || !Number.isInteger(line) || line < 1) return null;
+  const resource = input.resource ?? "";
+  const suffix = `/${path}:${line}`;
+  if (!resource.endsWith(suffix)) return null;
+  const repo = resource.slice(0, -suffix.length);
+  if (!/^[^/]+\/[^/]+$/.test(repo)) return null;
+  const commit = typeof raw.commit === "string" && /^[0-9a-f]{7,40}$/i.test(raw.commit) ? raw.commit : "HEAD";
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return `https://github.com/${repo}/blob/${commit}/${encoded}#L${line}`;
+}
+
+export function githubCodeLineUrlFromJson(input: {
+  source: string;
+  resource?: string | null;
+  rawJson?: string | null;
+}): string | null {
+  let raw: unknown = null;
+  try {
+    raw = JSON.parse(input.rawJson || "null");
+  } catch {
+    return null;
+  }
+  return githubCodeLineUrl({ source: input.source, resource: input.resource, raw });
+}
+
 /** Open CodeQL / code-scanning alerts. Alert numbers are per repo, so the resource keeps the repo. */
 export function parseGitHubCodeScanningAlerts(
   input: unknown,
@@ -111,6 +147,7 @@ export function parseGitHubCodeScanningAlerts(
     const repo = (a.repository?.full_name || repoFallback).replace(/\/$/, "");
     const path = a.most_recent_instance?.location?.path || "code-scanning";
     const line = a.most_recent_instance?.location?.start_line;
+    const commit = a.most_recent_instance?.commit_sha;
     const where = line != null ? `${path}:${line}` : path;
     const description = (a.rule?.description || a.most_recent_instance?.message?.text || a.rule?.id || "").trim();
     findings.push({
@@ -126,6 +163,7 @@ export function parseGitHubCodeScanningAlerts(
         severity: a.rule?.security_severity_level || a.rule?.severity,
         path,
         line,
+        commit,
         message: a.most_recent_instance?.message?.text,
       },
     });

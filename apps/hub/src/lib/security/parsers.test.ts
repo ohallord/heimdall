@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   fetchGitHubDependabotAlerts,
+  githubCodeLineUrl,
   parseGitHubCodeScanningAlerts,
   parseGitHubDependabotAlerts,
   parseGitHubOrgAdvisories,
@@ -106,6 +107,12 @@ describe("security parsers (sanitized fixtures)", () => {
       severity: "medium",
       resource: "acme/other/web/app.js:12",
     });
+    expect(githubCodeLineUrl(findings[0]!)).toBe(
+      "https://github.com/acme/widgets/blob/abc123def4567890/app/api.py#L40",
+    );
+    expect(githubCodeLineUrl({ ...findings[1]!, raw: { ...(findings[1]!.raw as object), commit: undefined } })).toBe(
+      "https://github.com/acme/other/blob/HEAD/web/app.js#L12",
+    );
   });
 
   it("parses GitHub org security advisories", () => {

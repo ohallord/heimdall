@@ -10,6 +10,7 @@
       "security_severity_level": "high"
     },
     "most_recent_instance": {
+      "commit_sha": "abc123def4567890",
       "location": { "path": "app/api.py", "start_line": 40 },
       "message": { "text": "This path depends on a user-provided value." }
     }
