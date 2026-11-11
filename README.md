@@ -15,9 +15,9 @@ I built this to watch my own lab from one place without poking holes in every ho
 
 ## Screenshots
 
-![Services](docs/screenshots/services.png)
+![Bifrost Beacon brand sheet](docs/screenshots/brand-sheet.png)
 
-![Fleet](docs/screenshots/fleet.png)
+Brand mark is **Concept B — Bifrost Beacon** (Dan-approved). Favicon uses the tower plus the outer purple arc only. App header, OG image, and favicon ship from `assets/brand/`. Synthetic brand sheet above; product UI screenshots from a recorded lab walkthrough are still `TODO(Dan)`.
 
 ## Architecture
 

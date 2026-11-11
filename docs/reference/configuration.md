@@ -22,7 +22,7 @@ Heimdall is configured through environment variables. Settings stored in the dat
 | `HEIMDALL_ORIGIN` | — | WebAuthn expected origin (`https://heimdall.example.com`) |
 | `HEIMDALL_COOKIE_SECURE` | derived | `true` or `false`. Overrides the `Secure` cookie flag. Otherwise it is on for `https://` public URLs |
 | `HEIMDALL_PUBLIC_BASE_URL` | `HEIMDALL_PUBLIC_URL` | Preferred base for links in alert messages |
-| `HEIMDALL_ORG_ID` | auto | Pin bootstrap-token registrations to this org ID. By default, the org that has admin users is used |
+| `HEIMDALL_ORG_ID` | auto | Pin bootstrap-token registrations and the read-only MCP to this org ID. By default, the org that has admin users is used |
 
 ### Read-only MCP
 

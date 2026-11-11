@@ -456,7 +456,7 @@ export function WizardForm({ initialStep }: { initialStep: Step }) {
       {step === "remotes" ? (
         <form onSubmit={submitRemotes} className="space-y-4 border border-border bg-surface p-5">
           <p className="text-sm text-muted">
-            Optional Phase 6 remotes: GitHub org token (Dependabot / advisories)
+            Optional Phase 6 remotes: GitHub org token (Dependabot, code scanning, advisories)
             and GitLab project token (GraphQL vulnerabilities). Skip if you will
             only ingest Trivy/OSV reports.
           </p>

@@ -1,0 +1,38 @@
+[
+  {
+    "number": 7,
+    "state": "open",
+    "html_url": "https://github.com/acme/widgets/security/code-scanning/7",
+    "rule": {
+      "id": "py/path-injection",
+      "description": "Uncontrolled data used in path expression",
+      "severity": "error",
+      "security_severity_level": "high"
+    },
+    "most_recent_instance": {
+      "location": { "path": "app/api.py", "start_line": 40 },
+      "message": { "text": "This path depends on a user-provided value." }
+    }
+  },
+  {
+    "number": 1,
+    "state": "open",
+    "html_url": "https://github.com/acme/widgets/security/code-scanning/1",
+    "rule": {
+      "id": "js/xss-through-dom",
+      "description": "DOM text reinterpreted as HTML",
+      "severity": "warning"
+    },
+    "most_recent_instance": {
+      "location": { "path": "web/app.js", "start_line": 12 },
+      "message": { "text": "DOM text is reinterpreted as HTML." }
+    },
+    "repository": { "full_name": "acme/other" }
+  },
+  {
+    "number": 2,
+    "state": "fixed",
+    "rule": { "id": "py/stack-trace-exposure", "description": "Stack trace exposure", "security_severity_level": "medium" },
+    "most_recent_instance": { "location": { "path": "app/api.py", "start_line": 9 } }
+  }
+]

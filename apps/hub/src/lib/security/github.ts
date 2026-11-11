@@ -23,6 +23,23 @@ type DependabotAlert = {
   };
 };
 
+type CodeScanningAlert = {
+  number?: number;
+  state?: string;
+  html_url?: string;
+  rule?: {
+    id?: string;
+    description?: string;
+    severity?: string;
+    security_severity_level?: string;
+  };
+  most_recent_instance?: {
+    location?: { path?: string; start_line?: number };
+    message?: { text?: string };
+  };
+  repository?: { full_name?: string };
+};
+
 type OrgAdvisory = {
   ghsa_id?: string;
   cve_id?: string | null;
@@ -66,6 +83,51 @@ export function parseGitHubDependabotAlerts(
       cve: a.security_advisory?.cve_id || undefined,
       url: a.html_url,
       raw: a,
+    });
+  }
+  return findings;
+}
+
+function codeScanningSeverity(alert: CodeScanningAlert): ReturnType<typeof normalizeSeverity> {
+  const level = normalizeSeverity(alert.rule?.security_severity_level);
+  if (level !== "unknown") return level;
+  const bucket = (alert.rule?.severity || "").toLowerCase();
+  if (bucket === "error") return "high";
+  if (bucket === "warning") return "medium";
+  if (bucket === "note") return "low";
+  return "unknown";
+}
+
+/** Open CodeQL / code-scanning alerts. Alert numbers are per repo, so the resource keeps the repo. */
+export function parseGitHubCodeScanningAlerts(
+  input: unknown,
+  repoFallback = "github",
+): NormalizedFinding[] {
+  const alerts = Array.isArray(input) ? (input as CodeScanningAlert[]) : [];
+  const findings: NormalizedFinding[] = [];
+  for (const a of alerts) {
+    if (a.state && a.state !== "open") continue;
+    if (a.number == null) continue;
+    const repo = (a.repository?.full_name || repoFallback).replace(/\/$/, "");
+    const path = a.most_recent_instance?.location?.path || "code-scanning";
+    const line = a.most_recent_instance?.location?.start_line;
+    const where = line != null ? `${path}:${line}` : path;
+    const description = (a.rule?.description || a.most_recent_instance?.message?.text || a.rule?.id || "").trim();
+    findings.push({
+      source: "github",
+      externalId: `code-scanning-${a.number}`,
+      title: description || `code-scanning-${a.number}`,
+      severity: codeScanningSeverity(a),
+      resource: `${repo}/${where}`,
+      url: a.html_url,
+      raw: {
+        number: a.number,
+        rule: a.rule?.id,
+        severity: a.rule?.security_severity_level || a.rule?.severity,
+        path,
+        line,
+        message: a.most_recent_instance?.message?.text,
+      },
     });
   }
   return findings;
@@ -170,6 +232,13 @@ async function githubGet(opts: FetchOpts, path: string, label: string): Promise<
   return res.json();
 }
 
+function featureOff(err: unknown): boolean {
+  return (
+    err instanceof ScmHttpError &&
+    (err.status === 404 || (err.status === 403 && /disabled|not enabled/i.test(err.message)))
+  );
+}
+
 type RepoRow = { full_name?: string; owner?: { login?: string }; archived?: boolean };
 
 /** Non-archived repos owned by `owner` (first 100). Private ones when the token is that user's. */
@@ -192,9 +261,29 @@ export async function fetchGitHubOwnerRepos(opts: FetchOpts & { owner: string })
   );
 }
 
+function repoApiPath(repo: string, rest: string): string {
+  return `/repos/${repo.split("/").map(encodeURIComponent).join("/")}${rest}`;
+}
+
+async function codeScanningFindings(
+  opts: FetchOpts,
+  path: string,
+  label: string,
+  repoFallback: string,
+): Promise<{ findings: NormalizedFinding[]; warning?: string }> {
+  try {
+    const alerts = await githubGet(opts, path, label);
+    return { findings: parseGitHubCodeScanningAlerts(alerts, repoFallback) };
+  } catch (err) {
+    if (featureOff(err)) return { findings: [] };
+    return { findings: [], warning: err instanceof Error ? err.message : `${label} failed` };
+  }
+}
+
 /**
- * Dependabot (and org advisories) for an org; for a personal account the org
- * endpoints 404, so walk the user's repos instead. Repos with Dependabot off are skipped.
+ * Dependabot, code scanning, and org advisories. A personal account 404s the
+ * org endpoints, so walk that user's repos instead. Repos with Dependabot or
+ * code scanning turned off are skipped.
  */
 export async function syncGitHubAccount(
   opts: FetchOpts & { name: string },
@@ -204,6 +293,14 @@ export async function syncGitHubAccount(
   try {
     const alerts = await fetchGitHubDependabotAlerts({ ...opts, org: name });
     const findings = parseGitHubDependabotAlerts(alerts, name);
+    const scanning = await codeScanningFindings(
+      opts,
+      `/orgs/${encodeURIComponent(name)}/code-scanning/alerts?state=open&per_page=100`,
+      `github code scanning ${name}`,
+      name,
+    );
+    findings.push(...scanning.findings);
+    if (scanning.warning) warnings.push(scanning.warning);
     try {
       findings.push(...parseGitHubOrgAdvisories(await fetchGitHubOrgAdvisories({ ...opts, org: name }), name));
     } catch (err) {
@@ -220,7 +317,7 @@ export async function syncGitHubAccount(
     try {
       const alerts = await githubGet(
         opts,
-        `/repos/${repo.split("/").map(encodeURIComponent).join("/")}/dependabot/alerts?state=open&per_page=100`,
+        repoApiPath(repo, "/dependabot/alerts?state=open&per_page=100"),
         `github dependabot ${repo}`,
       );
       for (const f of parseGitHubDependabotAlerts(alerts, repo)) {
@@ -228,11 +325,16 @@ export async function syncGitHubAccount(
         findings.push(f);
       }
     } catch (err) {
-      const off =
-        err instanceof ScmHttpError &&
-        (err.status === 404 || (err.status === 403 && /disabled/i.test(err.message)));
-      if (!off) warnings.push(err instanceof Error ? err.message : `github dependabot ${repo} failed`);
+      if (!featureOff(err)) warnings.push(err instanceof Error ? err.message : `github dependabot ${repo} failed`);
     }
+    const scanning = await codeScanningFindings(
+      opts,
+      repoApiPath(repo, "/code-scanning/alerts?state=open&per_page=100"),
+      `github code scanning ${repo}`,
+      repo,
+    );
+    findings.push(...scanning.findings);
+    if (scanning.warning) warnings.push(scanning.warning);
   }
   return { findings, warnings };
 }

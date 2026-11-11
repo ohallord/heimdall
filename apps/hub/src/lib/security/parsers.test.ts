@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   fetchGitHubDependabotAlerts,
+  parseGitHubCodeScanningAlerts,
   parseGitHubDependabotAlerts,
   parseGitHubOrgAdvisories,
 } from "./github";
@@ -83,6 +84,27 @@ describe("security parsers (sanitized fixtures)", () => {
       packageName: "minimist",
       severity: "critical",
       fixedVersion: "1.2.6",
+    });
+  });
+
+  it("parses GitHub code scanning alerts and skips fixed", () => {
+    const findings = parseGitHubCodeScanningAlerts(
+      fixture("github-code-scanning-alerts.json"),
+      "acme/widgets",
+    );
+    expect(findings).toHaveLength(2);
+    expect(findings[0]).toMatchObject({
+      source: "github",
+      externalId: "code-scanning-7",
+      title: "Uncontrolled data used in path expression",
+      severity: "high",
+      resource: "acme/widgets/app/api.py:40",
+      url: "https://github.com/acme/widgets/security/code-scanning/7",
+    });
+    expect(findings[1]).toMatchObject({
+      externalId: "code-scanning-1",
+      severity: "medium",
+      resource: "acme/other/web/app.js:12",
     });
   });
 

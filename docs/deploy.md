@@ -114,7 +114,7 @@ Agent log tailing (`HEIMDALL_LOG_PATHS`) refuses a path whose last component is 
 | `HEIMDALL_COOKIE_SECURE` | Hub | Optional `true`/`false` override; otherwise derived from `HEIMDALL_PUBLIC_URL` (`http://` → non-Secure so Compose wizard sessions work) |
 | `HEIMDALL_ALERTS_PAUSED` | Hub | `true`/`1` kills all outbound SMTP/Slack/Discord/SMS (lab emergency stop); also `POST /api/v1/alerts/pause` |
 | `HEIMDALL_BOOTSTRAP_TOKEN` | Hub + agents | First-agent / bootstrap register **and** legacy ingest (Bearer). **Required everywhere: no shipped default** (Compose and Helm refuse to start/render without it; the dev token needs `HEIMDALL_DEV=1`, never in production). Generate with `openssl rand -hex 32`. In Helm prefer `hub.existingSecret.name` (key `bootstrap-token`) over a plaintext value. |
-| `HEIMDALL_ORG_ID` | Hub | Optional pin: bootstrap-token register attaches agents to this org id (otherwise prefers an org that already has admin users) |
+| `HEIMDALL_ORG_ID` | Hub | Optional pin: bootstrap-token register and the read-only MCP use this org id (otherwise the org that already has admin users) |
 | `HEIMDALL_MCP_TOKEN` | Hub | Bearer for read-only `POST /mcp`. **Empty default, never generated.** Unset or empty: only localhost / 127.0.0.1 / ::1. Generate with `openssl rand -hex 32`. Helm stores it in `<release>-secrets` key `mcp-token` (or `hub.mcp.existingSecret`). Session cookies do not authorize `/mcp`. | 
 | `HEIMDALL_MCP_ALLOWED_HOSTS` | Hub | Comma-separated Host allowlist when the MCP token is set (LAN host and the public tunnel host). Empty: any Host, bearer is the guard. Localhost is always allowed. |
 | `DATABASE_URL` | Hub | `postgres://…` (omit for PGlite/dev) |

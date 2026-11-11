@@ -72,8 +72,9 @@ export default async function SecurityPage({
         </h1>
         <p className="mt-2 text-sm text-muted">
           Unified view across optional runtime/Falco signals, host posture
-          (Trivy rootfs), Trivy images, OSV lockfiles, GitHub Dependabot /
-          advisories, and GitLab project vulnerabilities. Remotes live under
+          (Trivy rootfs), Trivy images, OSV lockfiles, GitHub Dependabot,
+          code scanning, and advisories, plus GitLab project vulnerabilities.
+          Remotes live under
           Security in the console nav.
         </p>
       </header>

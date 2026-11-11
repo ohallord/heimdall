@@ -29,6 +29,7 @@ describe("syncGitHubAccount", () => {
       if (url.includes("/repos/theohs/a/dependabot/alerts")) return json([alert(1)]);
       if (url.includes("/repos/theohs/b/dependabot/alerts"))
         return json({ message: "Dependabot alerts are disabled for this repository." }, 403);
+      if (url.includes("/code-scanning/alerts")) return json({ message: "no analysis found" }, 404);
       throw new Error(`unexpected ${url}`);
     });
     const r = await syncGitHubAccount({
@@ -57,8 +58,42 @@ describe("syncGitHubAccount", () => {
       name: "theohs",
       fetchImpl: fetchMock as unknown as typeof fetch,
     });
-    expect(r.warnings).toHaveLength(1);
-    expect(r.warnings[0]).toMatch(/theohs\/a.*403/);
+    expect(r.warnings).toHaveLength(2);
+    expect(r.warnings.every((w) => /theohs\/a.*403/.test(w))).toBe(true);
+  });
+
+  it("reads open code scanning alerts from each owned repo", async () => {
+    const fetchMock = vi.fn(async (u: RequestInfo | URL) => {
+      const url = String(u);
+      if (url.includes("/orgs/")) return json({ message: "Not Found" }, 404);
+      if (url.includes("/user/repos"))
+        return json([{ full_name: "theohs/app", owner: { login: "theohs" } }]);
+      if (url.includes("/dependabot/alerts")) return json([]);
+      if (url.includes("/code-scanning/alerts"))
+        return json([
+          {
+            number: 4,
+            state: "open",
+            html_url: "https://github.com/theohs/app/security/code-scanning/4",
+            rule: { id: "py/path-injection", description: "Path injection", security_severity_level: "high" },
+            most_recent_instance: { location: { path: "api.py", start_line: 10 } },
+          },
+        ]);
+      throw new Error(`unexpected ${url}`);
+    });
+    const r = await syncGitHubAccount({
+      token: "t",
+      name: "theohs",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+    expect(r.warnings).toEqual([]);
+    expect(r.findings).toEqual([
+      expect.objectContaining({
+        externalId: "code-scanning-4",
+        severity: "high",
+        resource: "theohs/app/api.py:10",
+      }),
+    ]);
   });
 
   it("still uses the org endpoints for an org", async () => {
