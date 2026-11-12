@@ -12,7 +12,7 @@ Installing Heimdall has three parts:
 
 | Piece | Requirement |
 | --- | --- |
-| Hub host | Docker with Compose v2.17+, **or** Kubernetes with Helm 3.14+, **or** Node.js 22+ |
+| Hub host | Docker with Compose v2.17+, **or** Kubernetes with Helm 3.14+, **or** Node.js 26+ |
 | Database | PostgreSQL 16+. Compose and Helm include one. PGlite (embedded) is for development only |
 | Agents | Linux with systemd, x86_64 or aarch64, outbound HTTP(S) to the hub |
 | Network | Agents and integrations must reach the hub. The hub does **not** need to reach your hosts |

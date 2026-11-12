@@ -58,7 +58,7 @@ docker run -d --name "$HUB_NAME" --network "$NET" \
   -e HOSTNAME=0.0.0.0 \
   -v "${STAGE}:/app" \
   -w /app \
-  node:22-bookworm-slim \
+  node:26-bookworm-slim \
   node server.js >/dev/null
 
 echo "==> waiting for hub health"

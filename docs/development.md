@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 22+
+- Node.js 26+
 - Go 1.22+
 - Docker (optional, for Compose image builds)
 - Helm 3 (optional, for chart lint/template)

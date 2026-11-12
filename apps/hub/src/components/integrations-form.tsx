@@ -124,7 +124,7 @@ export function IntegrationsForm({ canWrite }: { canWrite: boolean }) {
           <span className="font-mono">{unifi?.tokenHint ?? "—"}</span>
         </p>
         {unifi?.token ? (
-          <p className="rounded border border-border bg-[#f8fafb] px-3 py-2 font-mono text-xs break-all">
+          <p className="rounded-sm border border-border bg-[#f8fafb] px-3 py-2 font-mono text-xs break-all">
             New token (copy now): {unifi.token}
           </p>
         ) : null}
@@ -153,7 +153,7 @@ export function IntegrationsForm({ canWrite }: { canWrite: boolean }) {
           <span className="font-mono">{otel?.tokenHint ?? "—"}</span>
         </p>
         {otel?.token ? (
-          <p className="rounded border border-border bg-[#f8fafb] px-3 py-2 font-mono text-xs break-all">
+          <p className="rounded-sm border border-border bg-[#f8fafb] px-3 py-2 font-mono text-xs break-all">
             New token (copy now): {otel.token}
           </p>
         ) : null}
@@ -181,7 +181,7 @@ export function IntegrationsForm({ canWrite }: { canWrite: boolean }) {
           <span className="font-mono">{runtime?.tokenHint ?? "—"}</span>
         </p>
         {runtime?.token ? (
-          <p className="rounded border border-border bg-[#f8fafb] px-3 py-2 font-mono text-xs break-all">
+          <p className="rounded-sm border border-border bg-[#f8fafb] px-3 py-2 font-mono text-xs break-all">
             New token (copy now): {runtime.token}
           </p>
         ) : null}

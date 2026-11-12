@@ -2,7 +2,7 @@
 
 ## Set up
 
-Prerequisites: Node.js 22+, Go 1.22+ (CI uses 1.23), and optionally Docker with Compose v2.17+ and Helm 3.14+.
+Prerequisites: Node.js 26+, Go 1.26+, and optionally Docker with Compose v2.17+ and Helm 3.14+.
 
 ```bash
 # Hub (uses embedded PGlite; no database needed)

@@ -578,7 +578,7 @@ function Field({
         {label}
       </span>
       <input
-        className="w-full border border-border bg-white px-3 py-2 text-sm outline-none focus:border-signal"
+        className="w-full border border-border bg-white px-3 py-2 text-sm outline-hidden focus:border-signal"
         type={type}
         value={value}
         required={required}

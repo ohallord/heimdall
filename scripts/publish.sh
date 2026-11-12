@@ -310,7 +310,7 @@ if [[ "$RUN_TESTS" -eq 1 ]]; then
     # Runs as the calling user so the snapshot cleanup can delete node_modules/.next.
     # apparmor=unconfined: on Ubuntu 26.04 the docker-default profile denies node's
     # TERM/KILL to its own vitest fork workers ("kill EACCES"), failing every run.
-    node_image="${PUBLISH_NODE_IMAGE:-node:22-bookworm}"
+    node_image="${PUBLISH_NODE_IMAGE:-node:26-bookworm}"
     log "npm not on PATH; running hub checks in ${node_image}"
     docker run --rm \
       --security-opt apparmor=unconfined \

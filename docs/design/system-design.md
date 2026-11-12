@@ -29,7 +29,7 @@ A query language or Grafana-style dashboards; acting as a UniFi controller; clou
        │ JSON over HTTPS                 │ OTLP/HTTP JSON
        │ /api/v1/agents/*                │ /v1/{metrics,logs,traces}
        ▼                                 ▼
-┌──────────────────────── Heimdall hub (Next.js, Node 22) ──────┐
+┌──────────────────────── Heimdall hub (Next.js, Node 26) ──────┐
 │  http-guard: rate limit · body caps · CSRF · token auth       │
 │  ingest ─► store ─► alert engine ─► async dispatch ──► SMTP   │
 │                         │                          Slack      │

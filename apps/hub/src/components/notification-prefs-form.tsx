@@ -88,7 +88,7 @@ export function NotificationPrefsForm({ initial }: { initial: Prefs }) {
             SMS phone override
           </span>
           <input
-            className="w-full border border-border bg-white px-3 py-2 text-sm outline-none focus:border-signal"
+            className="w-full border border-border bg-white px-3 py-2 text-sm outline-hidden focus:border-signal"
             value={prefs.smsPhone}
             onChange={(e) =>
               setPrefs((p) => ({ ...p, smsPhone: e.target.value }))
@@ -113,7 +113,7 @@ export function NotificationPrefsForm({ initial }: { initial: Prefs }) {
               Start
             </span>
             <input
-              className="w-full border border-border bg-white px-3 py-2 text-sm outline-none focus:border-signal"
+              className="w-full border border-border bg-white px-3 py-2 text-sm outline-hidden focus:border-signal"
               value={prefs.quietStart}
               onChange={(e) =>
                 setPrefs((p) => ({ ...p, quietStart: e.target.value }))
@@ -126,7 +126,7 @@ export function NotificationPrefsForm({ initial }: { initial: Prefs }) {
               End
             </span>
             <input
-              className="w-full border border-border bg-white px-3 py-2 text-sm outline-none focus:border-signal"
+              className="w-full border border-border bg-white px-3 py-2 text-sm outline-hidden focus:border-signal"
               value={prefs.quietEnd}
               onChange={(e) =>
                 setPrefs((p) => ({ ...p, quietEnd: e.target.value }))
@@ -139,7 +139,7 @@ export function NotificationPrefsForm({ initial }: { initial: Prefs }) {
               Timezone
             </span>
             <input
-              className="w-full border border-border bg-white px-3 py-2 text-sm outline-none focus:border-signal"
+              className="w-full border border-border bg-white px-3 py-2 text-sm outline-hidden focus:border-signal"
               value={prefs.timezone}
               onChange={(e) =>
                 setPrefs((p) => ({ ...p, timezone: e.target.value }))

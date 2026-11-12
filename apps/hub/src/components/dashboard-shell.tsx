@@ -17,7 +17,7 @@ export function DashboardShell({
 }) {
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border bg-surface/90 backdrop-blur-sm">
+      <header className="border-b border-border bg-surface/90 backdrop-blur-xs">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="flex items-center gap-3">
