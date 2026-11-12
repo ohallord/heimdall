@@ -2,8 +2,10 @@ module github.com/heimdall-ops/heimdall/apps/agent
 
 go 1.26.0
 
+toolchain go1.26.11
+
 require (
-	golang.org/x/sys v0.49.0
+	golang.org/x/sys v0.50.0
 	k8s.io/api v0.37.2
 	k8s.io/apimachinery v0.37.2
 	k8s.io/client-go v0.37.2

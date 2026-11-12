@@ -263,7 +263,7 @@ function allowForm(fields: Record<string, string>): string {
   return `<p>Allow this client to read Heimdall?</p><form method="post" action="/oauth/authorize">${hidden({ ...fields, intent: "allow" })}<button>Allow</button></form>`;
 }
 
-async function passwordOk(login: string, password: string): Promise<Awaited<ReturnType<typeof findUserByLogin>>> {
+async function userForLogin(login: string, password: string): Promise<Awaited<ReturnType<typeof findUserByLogin>>> {
   dummyHash ??= hashPassword(randomBytes(16).toString("hex"));
   const user = await findUserByLogin(login);
   const ok = await verifyPassword(password, user ? user.password_hash : await dummyHash);
@@ -294,7 +294,7 @@ export async function oauthAuthorize(request: Request): Promise<Response> {
     const login = (field("login") || field("email")).trim().toLowerCase();
     const hit = limit({ key: `oauth|${clientIp(request)}|${login}`, ...presetFor("LOGIN") });
     if (!hit.allowed) return page("Sign in", "<p>Too many attempts.</p>", 429);
-    const user = await passwordOk(login, field("password"));
+    const user = await userForLogin(login, field("password"));
     if (!user) return page("Sign in", loginForm(fields, "Username, password, or code did not match."), 401);
     if (user.mfa_enrolled) {
       const code = field("code");
