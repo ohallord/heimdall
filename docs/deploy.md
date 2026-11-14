@@ -129,8 +129,9 @@ Rate limits are in-memory, per hub process (a restart or extra replica resets/sp
 |----------|---------|-------|
 | `HEIMDALL_TRUST_PROXY` | unset | Honour `X-Forwarded-For` for client IP. `true` = 1 trusted hop, or a number N. **Leave unset when the hub is directly exposed** (the header is spoofable); behind a reverse proxy without it, all clients share one IP bucket. |
 | `HEIMDALL_TZ` | `TZ`, else the server zone | IANA time zone for the scheduled security sync cron (e.g. `Europe/Dublin`). Shown on Dashboard → Settings. |
-| `HEIMDALL_ALERT_SUSTAIN_DEFAULT_SECONDS` | `120` | Hub-wide default for how long a threshold breach must last before it alerts (`0` = immediately). An org's value saved on Dashboard → Settings overrides it. |
+| `HEIMDALL_ALERT_SUSTAIN_DEFAULT_SECONDS` | `120` | Hub-wide default for how long a threshold breach must last before it alerts (`0` = immediately). An org's value saved on Dashboard → Settings overrides it, and a rule's own `sustain_seconds` overrides both. |
 | `HEIMDALL_DISABLE_SECURITY_SYNC_JOB` | unset | `1` stops the in-hub scheduled GitHub/GitLab sync. |
+| `HEIMDALL_DISABLE_UPTIME_JOB` | unset | `1` stops the in-hub uptime check scheduler (checks stop running; existing results stay). |
 | `HEIMDALL_RATE_LOGIN` | `10/900` | `max/windowSeconds`, key `ip + email`, failed attempts only (success clears) |
 | `HEIMDALL_RATE_MFA` | `5/300` | MFA verify (TOTP and recovery), key = user, failures only |
 | `HEIMDALL_RATE_INGEST` | `600/60` | Agent ingest + OTLP, key = hash of presented token (else IP) |

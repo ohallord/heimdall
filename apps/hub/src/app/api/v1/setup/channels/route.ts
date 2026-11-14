@@ -1,7 +1,8 @@
 import { mutating } from "@/lib/http-guard/mutating";
+import { recordAudit } from "@/lib/audit/log";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/http-guard/api-error";
-import { smtpProbeUrl } from "@/lib/alerts/channels";
+import { smtpProbeUrl, validateChannelConfig } from "@/lib/alerts/channels";
 import { setupClosed } from "@/lib/auth/setup-guard";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
@@ -37,6 +38,34 @@ const schema = z.object({
       apiBaseUrl: z.string().url().optional(),
     })
     .optional(),
+  ntfy: z
+    .object({
+      serverUrl: z.string().url().optional(),
+      topic: z.string().min(1),
+      token: z.string().optional(),
+    })
+    .optional(),
+  pushover: z
+    .object({
+      appToken: z.string().min(1),
+      userKey: z.string().min(1),
+      device: z.string().optional(),
+      apiBaseUrl: z.string().url().optional(),
+    })
+    .optional(),
+  telegram: z
+    .object({
+      botToken: z.string().min(1),
+      chatId: z.union([z.string().min(1), z.number()]),
+      apiBaseUrl: z.string().url().optional(),
+    })
+    .optional(),
+  pagerduty: z
+    .object({
+      routingKey: z.string().min(1),
+      apiBaseUrl: z.string().url().optional(),
+    })
+    .optional(),
 });
 
 async function postHandler(request: Request) {
@@ -52,10 +81,20 @@ async function postHandler(request: Request) {
       return NextResponse.json({ error: body.error.flatten() }, { status: 400 });
     }
 
+    for (const kind of ["ntfy", "pushover", "telegram", "pagerduty"] as const) {
+      const cfg = body.data[kind];
+      const problem = cfg ? validateChannelConfig(kind, cfg as Record<string, unknown>) : null;
+      if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+    }
+
     const blocked = await rejectBlockedUrls([
       body.data.slackWebhookUrl,
       body.data.discordWebhookUrl,
       body.data.sms?.apiBaseUrl,
+      body.data.ntfy?.serverUrl,
+      body.data.pushover?.apiBaseUrl,
+      body.data.telegram?.apiBaseUrl,
+      body.data.pagerduty?.apiBaseUrl,
       body.data.smtp ? smtpProbeUrl(body.data.smtp.host, body.data.smtp.port) : null,
     ]);
     if (blocked) return blocked;
@@ -84,6 +123,11 @@ async function postHandler(request: Request) {
       });
     }
 
+    for (const kind of ["ntfy", "pushover", "telegram", "pagerduty"] as const) {
+      const cfg = body.data[kind];
+      if (cfg) await upsertAlertChannel({ orgId: session.orgId!, kind, config: cfg });
+    }
+
     if (body.data.sms) {
       await upsertAlertChannel({
         orgId: session.orgId!,
@@ -104,6 +148,24 @@ async function postHandler(request: Request) {
       });
     }
 
+    await recordAudit({
+      session,
+      request,
+      action: "alert_channel.save",
+      detail: {
+        via: "setup",
+        kinds: [
+          body.data.smtp ? "smtp" : null,
+          body.data.slackWebhookUrl ? "slack" : null,
+          body.data.discordWebhookUrl ? "discord" : null,
+          body.data.sms ? "sms" : null,
+          body.data.ntfy ? "ntfy" : null,
+          body.data.pushover ? "pushover" : null,
+          body.data.telegram ? "telegram" : null,
+          body.data.pagerduty ? "pagerduty" : null,
+        ].filter(Boolean),
+      },
+    });
     await ensureDefaultThresholdRule(session.orgId!);
     await setSetupStep("agent_token");
 

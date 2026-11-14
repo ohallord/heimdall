@@ -21,8 +21,14 @@ URL-form names (`https://github.com/acme`, `https://gitlab.com/grp/app.git`) are
 to `acme` / `grp/app`.
 
 Personal accounts: a GitHub name that isn't an org (the `/orgs/` endpoints 404) syncs each
-non-archived repo it owns (first 100), skipping repos with Dependabot or code scanning off. A GitLab path that is a
-user or group syncs each project in it (first 100). Findings are keyed `<repo>/<manifest>`.
+non-archived repo it owns, skipping repos with Dependabot or code scanning off. A GitLab path that is a
+user or group syncs each project in it. Findings are keyed `<repo>/<manifest>`.
+
+Pagination: every GitHub list (Dependabot alerts, code scanning, advisories, repos) follows `Link: rel="next"`
+and every GitLab list (vulnerabilities, namespace projects) follows GraphQL `pageInfo` cursors, 100 items per
+page, up to 20 pages per list. If a list is still not exhausted after 20 pages the sync keeps what it has and adds a
+warning `… truncated after 20 pages; more results exist` (visible in the sync summary). Narrow the connected
+org/path (or split it across remotes) if you see it. A `next` link that points at another host is ignored.
 
 0 findings with 0 warnings is a real result: no open alerts on the connected remotes.
 

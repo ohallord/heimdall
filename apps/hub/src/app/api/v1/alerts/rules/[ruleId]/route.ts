@@ -1,4 +1,5 @@
 import { mutating } from "@/lib/http-guard/mutating";
+import { recordAudit } from "@/lib/audit/log";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
@@ -11,6 +12,8 @@ const patchSchema = z.object({
   warnThreshold: z.number().finite().nullable().optional(),
   alarmThreshold: z.number().finite().optional(),
   enabled: z.boolean().optional(),
+  /** Seconds a breach must last before alerting. null = use the org default. */
+  sustainSeconds: z.number().int().min(0).max(3600).nullable().optional(),
 });
 
 async function patchHandler(
@@ -27,7 +30,8 @@ async function patchHandler(
     if (
       body.data.warnThreshold === undefined &&
       body.data.alarmThreshold === undefined &&
-      body.data.enabled === undefined
+      body.data.enabled === undefined &&
+      body.data.sustainSeconds === undefined
     ) {
       return NextResponse.json({ error: "no fields to update" }, { status: 400 });
     }
@@ -38,10 +42,18 @@ async function patchHandler(
       warnThreshold: body.data.warnThreshold,
       alarmThreshold: body.data.alarmThreshold,
       enabled: body.data.enabled,
+      sustainSeconds: body.data.sustainSeconds,
     });
     if (!row) {
       return NextResponse.json({ error: "rule not found" }, { status: 404 });
     }
+    await recordAudit({
+      session,
+      request,
+      action: "alert.rule.update",
+      target: ruleId,
+      detail: { name: row.name, ...body.data },
+    });
     return NextResponse.json({
       rule: {
         id: row.id,
@@ -52,6 +64,7 @@ async function patchHandler(
         warnThreshold: row.warn_threshold,
         alarmThreshold: row.alarm_threshold ?? row.threshold,
         enabled: row.enabled,
+        sustainSeconds: row.sustain_seconds ?? null,
       },
     });
   } catch (err) {

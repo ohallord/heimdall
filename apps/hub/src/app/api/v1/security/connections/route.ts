@@ -1,4 +1,5 @@
 import { mutating } from "@/lib/http-guard/mutating";
+import { recordAudit } from "@/lib/audit/log";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
@@ -68,6 +69,20 @@ async function postHandler(request: Request) {
       config,
       tokenHint: hint(body.data.token),
       enabled: body.data.enabled,
+    });
+    await recordAudit({
+      session,
+      request,
+      action: "security.connection.add",
+      target: row.id,
+      detail: {
+        kind: row.kind,
+        name: row.name,
+        org: body.data.org,
+        projectPath: body.data.projectPath,
+        apiBaseUrl: body.data.apiBaseUrl,
+        enabled: row.enabled,
+      },
     });
     return NextResponse.json({
       connection: {

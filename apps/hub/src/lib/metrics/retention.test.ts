@@ -85,4 +85,19 @@ describe("retention defaults and purge", () => {
     );
     expect(alerts.rows.map((r) => r.id)).toEqual(["al_old_open"]);
   });
+
+  it("purges audit entries older than the logs retention window", async () => {
+    const a = await mkOrg("audit-a@x.io");
+    const db = await getDb();
+    await setLogsRetentionDays(a, 30);
+    await db.query(
+      `INSERT INTO audit_log (id, org_id, action, created_at) VALUES
+        ('aud_old', $1, 'x.old', NOW() - INTERVAL '45 days'),
+        ('aud_new', $1, 'x.new', NOW() - INTERVAL '5 days')`,
+      [a],
+    );
+    await purgeOrgLogsAndAlerts(a);
+    const rows = await db.query<{ id: string }>(`SELECT id FROM audit_log WHERE org_id = $1`, [a]);
+    expect(rows.rows.map((r) => r.id)).toEqual(["aud_new"]);
+  });
 });

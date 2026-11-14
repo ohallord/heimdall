@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AuditLogPanel } from "@/components/audit-log-panel";
 import { BackupPanel } from "@/components/backup-panel";
 import { OidcProviderForm } from "@/components/oidc-provider-form";
 import { getSession } from "@/lib/auth/session";
@@ -46,6 +47,8 @@ export default async function AdminPage() {
       />
 
       <BackupPanel />
+
+      <AuditLogPanel />
     </main>
   );
 }

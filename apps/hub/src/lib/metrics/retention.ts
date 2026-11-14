@@ -100,8 +100,8 @@ export async function setLogsRetentionDays(
 }
 
 /**
- * Delete log lines and closed (non-open) alert events older than the org's
- * logs retention. Open alarms are never purged.
+ * Delete log lines, closed (non-open) alert events and audit entries older than the
+ * org's logs retention. Open alarms are never purged.
  */
 export async function purgeOrgLogsAndAlerts(
   orgId: string,
@@ -120,6 +120,9 @@ export async function purgeOrgLogsAndAlerts(
      RETURNING id`,
     [orgId, cutoff],
   );
+  // Audit entries share the logs retention window.
+  const { purgeAudit } = await import("@/lib/audit/log");
+  await purgeAudit(orgId, cutoff);
   return { logs: logs.rowCount ?? 0, alerts: alerts.rowCount ?? 0 };
 }
 

@@ -1,7 +1,15 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { DiscordChannel, SlackChannel, SmsChannel } from "./channels";
+import {
+  DiscordChannel,
+  NtfyChannel,
+  PagerDutyChannel,
+  PushoverChannel,
+  SlackChannel,
+  SmsChannel,
+  TelegramChannel,
+} from "./channels";
 import { fetchGitHubDependabotAlerts } from "@/lib/security/github";
 import { fetchGitLabVulnerabilities } from "@/lib/security/gitlab";
 
@@ -71,5 +79,18 @@ describe("SmtpChannel send-time SSRF guard", () => {
     await expect(
       ch.send({ title: "t", severity: "critical", message: "m" } as never),
     ).rejects.toThrow(/blocked_host/);
+  });
+});
+
+describe("new push channels refuse private targets", () => {
+  it.each([
+    ["ntfy", () => new NtfyChannel({ serverUrl: "http://169.254.169.254", topic: "t" })],
+    ["pushover", () => new PushoverChannel({ appToken: "a", userKey: "u", apiBaseUrl: "http://10.0.0.5" })],
+    ["telegram", () => new TelegramChannel({ botToken: "1:a", chatId: "1", apiBaseUrl: "http://127.0.0.1:9" })],
+    ["pagerduty", () => new PagerDutyChannel({ routingKey: "r", apiBaseUrl: "http://[::1]" })],
+  ])("%s refuses a private base URL with blocked_host", async (_n, make) => {
+    const r = await make().send({ subject: "s", message: "m" });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/blocked_host/);
   });
 });

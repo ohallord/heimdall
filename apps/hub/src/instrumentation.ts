@@ -1,4 +1,4 @@
-/** Server start hooks: retention purge (Phase 25), the insecure bootstrap token warning (Phase 32), and the security sync schedule. */
+/** Server start hooks: retention purge (Phase 25), the insecure bootstrap token warning (Phase 32), the security sync schedule and the uptime check scheduler. */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
@@ -22,6 +22,13 @@ export async function register() {
     import("@/lib/security/schedule")
       .then(({ startSecuritySyncScheduler }) => startSecuritySyncScheduler())
       .catch((err) => console.error("[security-sync] scheduler failed to start", err));
+  }
+
+  // Synthetic uptime checks (http/tcp/tls), Dashboard → Uptime.
+  if (process.env.HEIMDALL_DISABLE_UPTIME_JOB !== "1") {
+    import("@/lib/uptime/monitor")
+      .then(({ startUptimeScheduler }) => startUptimeScheduler())
+      .catch((err) => console.error("[uptime] scheduler failed to start", err));
   }
 
   if (process.env.HEIMDALL_DISABLE_PURGE_JOB === "1") return;

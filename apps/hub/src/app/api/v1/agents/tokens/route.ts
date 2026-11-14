@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit/log";
 import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
@@ -52,6 +53,13 @@ async function postHandler(request: Request) {
       createdBy: session.userId,
       expiresAt: body.data.ttlHours ? new Date(Date.now() + body.data.ttlHours * 3_600_000) : null,
       maxUses: body.data.maxUses ?? null,
+    });
+    await recordAudit({
+      session,
+      request,
+      action: "agent_token.create",
+      target: row.id,
+      detail: { name: row.name, ttlHours: body.data.ttlHours ?? null, maxUses: body.data.maxUses ?? null },
     });
     return NextResponse.json(
       {

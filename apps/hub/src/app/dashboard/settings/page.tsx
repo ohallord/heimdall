@@ -56,6 +56,7 @@ export default async function SettingsPage() {
       metric: r.metric,
       warnThreshold: r.warn_threshold,
       alarmThreshold: r.alarm_threshold ?? r.threshold,
+      sustainSeconds: r.sustain_seconds ?? null,
     }));
 
   const canEditThresholds = session.role === "admin" || session.role === "operator";

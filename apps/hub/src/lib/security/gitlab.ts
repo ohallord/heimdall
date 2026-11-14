@@ -1,6 +1,7 @@
 import { normalizeSeverity, type NormalizedFinding } from "./types";
 import { normalizeScmPath, ScmHttpError } from "./scm-path";
 import { guardedFetch } from "@/lib/http-guard/safe-fetch";
+import { MAX_SCM_PAGES } from "./github";
 
 type GitlabVulnNode = {
   id?: string;
@@ -24,6 +25,7 @@ type GitlabGraphqlResponse = {
     project?: {
       vulnerabilities?: {
         nodes?: GitlabVulnNode[];
+        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
       };
     };
   };
@@ -31,9 +33,10 @@ type GitlabGraphqlResponse = {
 };
 
 export const GITLAB_VULNS_QUERY = `
-query ProjectVulnerabilities($fullPath: ID!, $first: Int!) {
+query ProjectVulnerabilities($fullPath: ID!, $first: Int!, $after: String) {
   project(fullPath: $fullPath) {
-    vulnerabilities(first: $first, state: [DETECTED, CONFIRMED]) {
+    vulnerabilities(first: $first, after: $after, state: [DETECTED, CONFIRMED]) {
+      pageInfo { hasNextPage endCursor }
       nodes {
         id
         title
@@ -104,6 +107,7 @@ export async function fetchGitLabVulnerabilities(input: {
   apiBaseUrl?: string;
   fetchImpl?: typeof fetch;
   first?: number;
+  onWarning?: (message: string) => void;
 }): Promise<unknown> {
   const base = (input.apiBaseUrl ?? "https://gitlab.com/api/graphql").replace(
     /\/$/,
@@ -111,77 +115,119 @@ export async function fetchGitLabVulnerabilities(input: {
   );
   const fullPath = normalizeScmPath("gitlab", input.projectPath);
   const fetchFn = input.fetchImpl ?? guardedFetch;
-  const res = await fetchFn(base, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${input.token}`,
-    },
-    body: JSON.stringify({
-      query: GITLAB_VULNS_QUERY,
-      variables: {
-        fullPath,
-        first: input.first ?? 50,
+  let merged: GitlabGraphqlResponse | null = null;
+  let after: string | null = null;
+  for (let page = 1; ; page++) {
+    const res: Response = await fetchFn(base, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${input.token}`,
       },
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`gitlab graphql ${res.status}: ${text.slice(0, 200)}`);
+      body: JSON.stringify({
+        query: GITLAB_VULNS_QUERY,
+        variables: { fullPath, first: input.first ?? 100, after },
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`gitlab graphql ${res.status}: ${text.slice(0, 200)}`);
+    }
+    const json = (await res.json()) as GitlabGraphqlResponse;
+    if (json.errors?.length) {
+      throw new Error(json.errors.map((e) => e.message).join("; "));
+    }
+    if (json.data && json.data.project == null) {
+      throw new ScmHttpError(
+        `gitlab project not found: ${fullPath} (needs group/project and a read_api token)`,
+        404,
+      );
+    }
+    if (!merged) merged = json;
+    else if (merged.data?.project?.vulnerabilities) {
+      merged.data.project.vulnerabilities.nodes = [
+        ...(merged.data.project.vulnerabilities.nodes ?? []),
+        ...(json.data?.project?.vulnerabilities?.nodes ?? []),
+      ];
+    }
+    const info = json.data?.project?.vulnerabilities?.pageInfo;
+    if (!info?.hasNextPage || !info.endCursor) break;
+    if (page >= MAX_SCM_PAGES) {
+      input.onWarning?.(
+        `gitlab vulnerabilities ${fullPath}: truncated after ${MAX_SCM_PAGES} pages; more results exist`,
+      );
+      break;
+    }
+    after = info.endCursor;
   }
-  const json = (await res.json()) as GitlabGraphqlResponse;
-  if (json.errors?.length) {
-    throw new Error(json.errors.map((e) => e.message).join("; "));
-  }
-  if (json.data && json.data.project == null) {
-    throw new ScmHttpError(
-      `gitlab project not found: ${fullPath} (needs group/project and a read_api token)`,
-      404,
-    );
-  }
-  return json;
+  return merged;
 }
 
 export const GITLAB_NAMESPACE_PROJECTS_QUERY = `
-query NamespaceProjects($fullPath: ID!) {
+query NamespaceProjects($fullPath: ID!, $after: String) {
   namespace(fullPath: $fullPath) {
-    projects(first: 100, includeSubgroups: true) {
+    projects(first: 100, after: $after, includeSubgroups: true) {
+      pageInfo { hasNextPage endCursor }
       nodes { fullPath archived }
     }
   }
 }
 `.trim();
 
-type GitlabOpts = { token: string; apiBaseUrl?: string; fetchImpl?: typeof fetch };
+type GitlabOpts = {
+  token: string;
+  apiBaseUrl?: string;
+  fetchImpl?: typeof fetch;
+  onWarning?: (message: string) => void;
+};
 
-/** Non-archived project paths in a user or group namespace (first 100), or null if no such namespace. */
+/** Non-archived project paths in a user or group namespace, or null if no such namespace. */
 export async function fetchGitLabNamespaceProjects(
   opts: GitlabOpts & { namespace: string },
 ): Promise<string[] | null> {
   const base = (opts.apiBaseUrl ?? "https://gitlab.com/api/graphql").replace(/\/$/, "");
   const fetchFn = opts.fetchImpl ?? guardedFetch;
-  const res = await fetchFn(base, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${opts.token}` },
-    body: JSON.stringify({
-      query: GITLAB_NAMESPACE_PROJECTS_QUERY,
-      variables: { fullPath: opts.namespace },
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new ScmHttpError(`gitlab graphql ${res.status}: ${text.slice(0, 200)}`, res.status);
+  const out: string[] = [];
+  let after: string | null = null;
+  for (let page = 1; ; page++) {
+    const res: Response = await fetchFn(base, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${opts.token}` },
+      body: JSON.stringify({
+        query: GITLAB_NAMESPACE_PROJECTS_QUERY,
+        variables: { fullPath: opts.namespace, after },
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ScmHttpError(`gitlab graphql ${res.status}: ${text.slice(0, 200)}`, res.status);
+    }
+    const json = (await res.json()) as {
+      errors?: Array<{ message?: string }>;
+      data?: {
+        namespace?: {
+          projects?: {
+            nodes?: Array<{ fullPath?: string; archived?: boolean }>;
+            pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+          };
+        } | null;
+      };
+    };
+    if (json.errors?.length) throw new Error(json.errors.map((e) => e.message).join("; "));
+    const ns = json.data?.namespace;
+    if (!ns) return page === 1 ? null : out;
+    for (const p of ns.projects?.nodes ?? []) if (!p.archived && p.fullPath) out.push(p.fullPath);
+    const info = ns.projects?.pageInfo;
+    if (!info?.hasNextPage || !info.endCursor) break;
+    if (page >= MAX_SCM_PAGES) {
+      opts.onWarning?.(
+        `gitlab projects ${opts.namespace}: truncated after ${MAX_SCM_PAGES} pages; more projects exist`,
+      );
+      break;
+    }
+    after = info.endCursor;
   }
-  const json = (await res.json()) as {
-    errors?: Array<{ message?: string }>;
-    data?: { namespace?: { projects?: { nodes?: Array<{ fullPath?: string; archived?: boolean }> } } | null };
-  };
-  if (json.errors?.length) throw new Error(json.errors.map((e) => e.message).join("; "));
-  const ns = json.data?.namespace;
-  if (!ns) return null;
-  return (ns.projects?.nodes ?? [])
-    .filter((p) => !p.archived && p.fullPath)
-    .map((p) => p.fullPath!);
+  return out;
 }
 
 /** Vulnerabilities for a project path, or for every project when the path is a user/group namespace. */
@@ -189,9 +235,11 @@ export async function syncGitLabPath(
   opts: GitlabOpts & { path: string },
 ): Promise<{ findings: NormalizedFinding[]; warnings: string[] }> {
   const path = normalizeScmPath("gitlab", opts.path);
+  const warnings: string[] = [];
+  opts = { ...opts, onWarning: (m) => warnings.push(m) };
   try {
     const payload = await fetchGitLabVulnerabilities({ ...opts, projectPath: path });
-    return { findings: parseGitLabVulnerabilities(payload, path), warnings: [] };
+    return { findings: parseGitLabVulnerabilities(payload, path), warnings };
   } catch (err) {
     if (!(err instanceof ScmHttpError && err.status === 404)) throw err;
   }
@@ -203,7 +251,6 @@ export async function syncGitLabPath(
     };
   }
   const findings: NormalizedFinding[] = [];
-  const warnings: string[] = [];
   for (const project of projects) {
     try {
       const payload = await fetchGitLabVulnerabilities({ ...opts, projectPath: project });

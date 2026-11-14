@@ -198,30 +198,83 @@ export function parseGitHubOrgAdvisories(
   return findings;
 }
 
+/** Pages followed per list before we stop and warn (100 items each). */
+export const MAX_SCM_PAGES = 20;
+
+/** URL of the `rel="next"` entry in a GitHub `Link` header, or null. */
+export function parseNextLink(header: string | null | undefined): string | null {
+  if (!header) return null;
+  for (const part of header.split(",")) {
+    const m = part.match(/<([^>]+)>\s*;\s*rel="?next"?/i);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+type FetchOpts = {
+  token: string;
+  apiBaseUrl?: string;
+  fetchImpl?: typeof fetch;
+  /** Called with a human-readable warning (e.g. the page cap was hit). */
+  onWarning?: (message: string) => void;
+};
+
+/**
+ * GET a list endpoint and follow `Link: rel="next"` up to MAX_SCM_PAGES, merging the arrays.
+ * A next link on another origin is ignored so the token never leaves the API host.
+ */
+async function githubGetPaged(opts: FetchOpts, path: string, label: string): Promise<unknown[]> {
+  const base = (opts.apiBaseUrl ?? "https://api.github.com").replace(/\/$/, "");
+  const fetchFn = opts.fetchImpl ?? guardedFetch;
+  const headers = {
+    accept: "application/vnd.github+json",
+    authorization: `Bearer ${opts.token}`,
+    "x-github-api-version": "2022-11-28",
+    "user-agent": "heimdall-hub",
+  };
+  const out: unknown[] = [];
+  let url: string | null = `${base}${path}`;
+  for (let page = 1; url; page++) {
+    const res: Response = await fetchFn(url, { headers });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ScmHttpError(`${label} ${res.status}: ${text.slice(0, 200)}`, res.status);
+    }
+    const body = await res.json();
+    if (Array.isArray(body)) out.push(...body);
+    else if (page === 1) return body as unknown[]; // non-list payload: hand back as-is
+    let next = parseNextLink(res.headers.get("link"));
+    if (next) {
+      try {
+        if (new URL(next, base).origin !== new URL(base).origin) next = null;
+        else next = new URL(next, base).toString();
+      } catch {
+        next = null;
+      }
+    }
+    if (next && page >= MAX_SCM_PAGES) {
+      opts.onWarning?.(
+        `${label}: truncated after ${MAX_SCM_PAGES} pages (${out.length} items); more results exist`,
+      );
+      break;
+    }
+    url = next;
+  }
+  return out;
+}
+
 export async function fetchGitHubDependabotAlerts(input: {
   token: string;
   org: string;
   apiBaseUrl?: string;
   fetchImpl?: typeof fetch;
+  onWarning?: (message: string) => void;
 }): Promise<unknown> {
-  const base = (input.apiBaseUrl ?? "https://api.github.com").replace(/\/$/, "");
-  const fetchFn = input.fetchImpl ?? guardedFetch;
-  const res = await fetchFn(
-    `${base}/orgs/${encodeURIComponent(normalizeScmPath("github", input.org))}/dependabot/alerts?state=open&per_page=100`,
-    {
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${input.token}`,
-        "x-github-api-version": "2022-11-28",
-        "user-agent": "heimdall-hub",
-      },
-    },
+  return githubGetPaged(
+    input,
+    `/orgs/${encodeURIComponent(normalizeScmPath("github", input.org))}/dependabot/alerts?state=open&per_page=100`,
+    "github dependabot",
   );
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new ScmHttpError(`github dependabot ${res.status}: ${text.slice(0, 200)}`, res.status);
-  }
-  return res.json();
 }
 
 export async function fetchGitHubOrgAdvisories(input: {
@@ -229,46 +282,16 @@ export async function fetchGitHubOrgAdvisories(input: {
   org: string;
   apiBaseUrl?: string;
   fetchImpl?: typeof fetch;
+  onWarning?: (message: string) => void;
 }): Promise<unknown> {
-  const base = (input.apiBaseUrl ?? "https://api.github.com").replace(/\/$/, "");
-  const fetchFn = input.fetchImpl ?? guardedFetch;
-  const res = await fetchFn(
-    `${base}/orgs/${encodeURIComponent(normalizeScmPath("github", input.org))}/security-advisories?per_page=100`,
-    {
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${input.token}`,
-        "x-github-api-version": "2022-11-28",
-        "user-agent": "heimdall-hub",
-      },
-    },
+  return githubGetPaged(
+    input,
+    `/orgs/${encodeURIComponent(normalizeScmPath("github", input.org))}/security-advisories?per_page=100`,
+    "github advisories",
   );
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new ScmHttpError(`github advisories ${res.status}: ${text.slice(0, 200)}`, res.status);
-  }
-  return res.json();
 }
 
-type FetchOpts = { token: string; apiBaseUrl?: string; fetchImpl?: typeof fetch };
-
-async function githubGet(opts: FetchOpts, path: string, label: string): Promise<unknown> {
-  const base = (opts.apiBaseUrl ?? "https://api.github.com").replace(/\/$/, "");
-  const fetchFn = opts.fetchImpl ?? guardedFetch;
-  const res = await fetchFn(`${base}${path}`, {
-    headers: {
-      accept: "application/vnd.github+json",
-      authorization: `Bearer ${opts.token}`,
-      "x-github-api-version": "2022-11-28",
-      "user-agent": "heimdall-hub",
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new ScmHttpError(`${label} ${res.status}: ${text.slice(0, 200)}`, res.status);
-  }
-  return res.json();
-}
+const githubGet = githubGetPaged;
 
 function featureOff(err: unknown): boolean {
   return (
@@ -279,7 +302,7 @@ function featureOff(err: unknown): boolean {
 
 type RepoRow = { full_name?: string; owner?: { login?: string }; archived?: boolean };
 
-/** Non-archived repos owned by `owner` (first 100). Private ones when the token is that user's. */
+/** Non-archived repos owned by `owner` . Private ones when the token is that user's. */
 export async function fetchGitHubOwnerRepos(opts: FetchOpts & { owner: string }): Promise<string[]> {
   const pick = (rows: unknown) =>
     (Array.isArray(rows) ? (rows as RepoRow[]) : [])
@@ -328,6 +351,7 @@ export async function syncGitHubAccount(
 ): Promise<{ findings: NormalizedFinding[]; warnings: string[] }> {
   const name = normalizeScmPath("github", opts.name);
   const warnings: string[] = [];
+  opts = { ...opts, onWarning: (m) => warnings.push(m) };
   try {
     const alerts = await fetchGitHubDependabotAlerts({ ...opts, org: name });
     const findings = parseGitHubDependabotAlerts(alerts, name);

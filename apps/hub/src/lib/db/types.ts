@@ -80,7 +80,15 @@ export type AgentTokenRow = {
   use_count: number;
 };
 
-export type AlertChannelKind = "smtp" | "slack" | "discord" | "sms";
+export type AlertChannelKind =
+  | "smtp"
+  | "slack"
+  | "discord"
+  | "sms"
+  | "ntfy"
+  | "pushover"
+  | "telegram"
+  | "pagerduty";
 
 export type AlertChannelRow = {
   id: string;
@@ -102,6 +110,8 @@ export type AlertRuleRow = {
   warn_threshold: number | null;
   alarm_threshold: number | null;
   enabled: boolean;
+  /** Seconds a breach must last before alerting; null = org default. */
+  sustain_seconds?: number | null;
   created_at: string;
 };
 

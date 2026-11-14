@@ -8,6 +8,8 @@ export type HostRuleEdit = {
   metric: string;
   warnThreshold: number | null;
   alarmThreshold: number;
+  /** Seconds a breach must last before alerting; null = org default. */
+  sustainSeconds: number | null;
 };
 
 export function HostThresholdForm({ initial }: { initial: HostRuleEdit[] }) {
@@ -18,7 +20,7 @@ export function HostThresholdForm({ initial }: { initial: HostRuleEdit[] }) {
 
   function updateLocal(
     id: string,
-    patch: Partial<Pick<HostRuleEdit, "warnThreshold" | "alarmThreshold">>,
+    patch: Partial<Pick<HostRuleEdit, "warnThreshold" | "alarmThreshold" | "sustainSeconds">>,
   ) {
     setRules((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...patch } : r)),
@@ -38,6 +40,7 @@ export function HostThresholdForm({ initial }: { initial: HostRuleEdit[] }) {
           body: JSON.stringify({
             warnThreshold: rule.warnThreshold,
             alarmThreshold: rule.alarmThreshold,
+            sustainSeconds: rule.sustainSeconds,
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -75,7 +78,8 @@ export function HostThresholdForm({ initial }: { initial: HostRuleEdit[] }) {
           </h2>
           <p className="mt-1 text-xs text-muted">
             Warn (yellow) is UI/history only by default. Alarm (red) notifies
-            channels. Defaults follow Netdata.
+            channels. Defaults follow Netdata. Sustain is how long a breach must
+            last before alerting; blank uses the org-wide window.
           </p>
         </div>
         <table className="w-full text-left text-sm">
@@ -84,6 +88,7 @@ export function HostThresholdForm({ initial }: { initial: HostRuleEdit[] }) {
               <th className="px-4 py-2">Metric</th>
               <th className="px-4 py-2">Warn %</th>
               <th className="px-4 py-2">Alarm %</th>
+              <th className="px-4 py-2">Sustain (s)</th>
             </tr>
           </thead>
           <tbody>
@@ -123,6 +128,23 @@ export function HostThresholdForm({ initial }: { initial: HostRuleEdit[] }) {
                     onChange={(e) =>
                       updateLocal(rule.id, {
                         alarmThreshold: Number(e.target.value),
+                      })
+                    }
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="number"
+                    step="1"
+                    min={0}
+                    max={3600}
+                    placeholder="org default"
+                    aria-label={`${rule.name} sustain seconds`}
+                    className="w-28 border border-border bg-background px-2 py-1 font-mono text-sm"
+                    value={rule.sustainSeconds ?? ""}
+                    onChange={(e) =>
+                      updateLocal(rule.id, {
+                        sustainSeconds: e.target.value === "" ? null : Number(e.target.value),
                       })
                     }
                   />

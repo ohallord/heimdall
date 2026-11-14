@@ -348,6 +348,8 @@ export async function updateAlertRuleThresholds(input: {
   warnThreshold?: number | null;
   alarmThreshold?: number;
   enabled?: boolean;
+  /** Per-rule sustain window (0..3600 s); null clears the override (org default). */
+  sustainSeconds?: number | null;
 }): Promise<AlertRuleRow | null> {
   const existing = await getAlertRule(input.orgId, input.ruleId);
   if (!existing) return null;
@@ -362,6 +364,13 @@ export async function updateAlertRuleThresholds(input: {
       : (existing.alarm_threshold ?? existing.threshold);
   const enabled =
     input.enabled !== undefined ? input.enabled : existing.enabled;
+  const sustain =
+    input.sustainSeconds !== undefined
+      ? input.sustainSeconds
+      : (existing.sustain_seconds ?? null);
+  if (sustain != null && (!Number.isInteger(sustain) || sustain < 0 || sustain > 3600)) {
+    throw Object.assign(new Error("sustain must be 0..3600 seconds"), { status: 400 });
+  }
 
   if (
     warn != null &&
@@ -381,9 +390,10 @@ export async function updateAlertRuleThresholds(input: {
      SET warn_threshold = $3,
          alarm_threshold = $4,
          threshold = $4,
-         enabled = $5
+         enabled = $5,
+         sustain_seconds = $6
      WHERE org_id = $1 AND id = $2`,
-    [input.orgId, input.ruleId, warn, alarm, enabled],
+    [input.orgId, input.ruleId, warn, alarm, enabled, sustain],
   );
   return getAlertRule(input.orgId, input.ruleId);
 }

@@ -89,10 +89,34 @@ curl -X POST https://<hub>/api/v1/setup/channels \
 
 The `Origin` header must match `HEIMDALL_PUBLIC_URL`, or the CSRF check rejects the request. The SMS channel works with Twilio and any API that is compatible with Twilio's Messages API (set `sms.apiBaseUrl`). If a webhook URL points at a private address, allow it with [`HEIMDALL_ALLOW_PRIVATE_HOSTS`](#let-the-hub-reach-services-on-your-lan).
 
-Each user then picks which channels they personally want under **Settings → Notification preferences**. A channel is used if at least one user wants it, or if nobody has set preferences.
+#### Phone and on-call channels (API only)
+
+ntfy, Pushover, Telegram and PagerDuty are configured with the same request (add only the ones you use; there is
+no wizard field for them). Secrets are stored encrypted like the other channels and shown as `[redacted]` in backups.
+
+```json
+{
+  "ntfy":      {"topic": "heimdall", "serverUrl": "https://ntfy.example.com", "token": "tk_…"},
+  "pushover":  {"appToken": "…", "userKey": "…", "device": "phone"},
+  "telegram":  {"botToken": "123456:ABC-DEF", "chatId": "-1001234567890"},
+  "pagerduty": {"routingKey": "…"}
+}
+```
+
+| Channel | Notes |
+| --- | --- |
+| ntfy | `serverUrl` defaults to `https://ntfy.sh`; `token` is optional (access token for protected topics). Critical → priority 5, warning → 3, recovery/info → 2. |
+| Pushover | Critical → high priority (1), warning → normal (0), recovery/info → quiet (-1). Emergency priority is not used. |
+| Telegram | Message the bot first, then use the chat id (a negative number for groups). Sent as plain text. |
+| PagerDuty | Events API v2 integration key. Alerts trigger an incident; the recovery message resolves it (same `dedup_key`). Severity maps to critical / warning / info. |
+
+All of them go through the SSRF guard, so a private `serverUrl` / `apiBaseUrl` is refused unless allowlisted with
+`HEIMDALL_ALLOW_PRIVATE_HOSTS`. There are no per-user preference toggles for these kinds: they are used whenever the channel is enabled.
+
+Each user then picks which of Email, Slack, Discord and SMS they personally want under **Settings → Notification preferences**. A channel is used if at least one user wants it, or if nobody has set preferences.
 
 ### Send a test alert
-*Operator or admin.* There is no button for this yet. Call `POST /api/v1/alerts/test` from a signed-in session (with the same cookie and `Origin` header as in the channel example above). The response lists each channel's result.
+*Operator or admin.* There is no button for this yet. Call `POST /api/v1/alerts/test` from a signed-in session (with the same cookie and `Origin` header as in the channel example above). The response lists each channel's result. Add `"channel": "ntfy"` (or `pushover`, `telegram`, `pagerduty`, `slack`, `discord`, `smtp`, `sms`) to test only that channel, and `"dryRun": false` to actually send.
 
 ### Tune CPU, memory and disk thresholds
 *Operator or admin.* **Settings → Host thresholds.** Each metric has two levels:

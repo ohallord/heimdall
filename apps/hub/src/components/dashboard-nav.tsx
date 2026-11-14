@@ -26,6 +26,7 @@ const ITEMS: DashboardNavItem[] = [
   { href: "/dashboard/containers", label: "Containers" },
   { href: "/dashboard/network", label: "Network" },
   { href: "/dashboard/services", label: "Services" },
+  { href: "/dashboard/uptime", label: "Uptime" },
   {
     href: "/dashboard/security",
     label: "Security",

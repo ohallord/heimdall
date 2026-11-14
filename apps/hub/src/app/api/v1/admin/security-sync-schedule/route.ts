@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit/log";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { apiError } from "@/lib/http-guard/api-error";
@@ -37,6 +38,12 @@ async function putHandler(request: Request) {
       cron: body.data.cron,
       enabled: body.data.enabled,
       updatedBy: session.userId ?? null,
+    });
+    await recordAudit({
+      session,
+      request,
+      action: "security.sync_schedule.update",
+      detail: { cron: body.data.cron, enabled: body.data.enabled },
     });
     return NextResponse.json(saved);
   } catch (err) {

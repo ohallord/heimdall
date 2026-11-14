@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit/log";
 import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
 import {
@@ -47,6 +48,7 @@ async function postHandler(request: Request) {
       return NextResponse.json({ error: "action must be rotate, disable or revert" }, { status: 400 });
     }
     const userId = session.userId ?? null;
+    await recordAudit({ session, request, action: `bootstrap_token.${body.data.action}` });
     if (body.data.action === "rotate") {
       const { token } = await rotateBootstrapToken(userId);
       return NextResponse.json({

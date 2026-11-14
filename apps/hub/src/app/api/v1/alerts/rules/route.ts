@@ -22,6 +22,7 @@ export async function GET() {
         warnThreshold: r.warn_threshold,
         alarmThreshold: r.alarm_threshold ?? r.threshold,
         enabled: r.enabled,
+        sustainSeconds: r.sustain_seconds ?? null,
       })),
     });
   } catch (err) {

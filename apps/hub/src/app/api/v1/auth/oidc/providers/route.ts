@@ -1,4 +1,5 @@
 import { mutating } from "@/lib/http-guard/mutating";
+import { recordAudit } from "@/lib/audit/log";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
@@ -76,6 +77,13 @@ async function postHandler(request: Request) {
       clientSecret: body.data.clientSecret,
       scopes: body.data.scopes,
       enabled: body.data.enabled,
+    });
+    await recordAudit({
+      session,
+      request,
+      action: "oidc.provider.save",
+      target: row.id,
+      detail: { name: row.name, issuer: row.issuer, clientId: row.client_id, scopes: row.scopes, enabled: row.enabled },
     });
     return NextResponse.json({
       provider: {

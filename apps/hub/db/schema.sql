@@ -420,3 +420,51 @@ CREATE TABLE IF NOT EXISTS security_sync_schedules (
   updated_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Audit log of administrative changes (who changed what). Detail is JSON text with secrets
+-- redacted; actor columns are copies (no FK) so rows survive user deletion. Purged with logs retention.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  actor_user_id TEXT,
+  actor_email TEXT,
+  action TEXT NOT NULL,
+  target TEXT,
+  detail TEXT NOT NULL DEFAULT '{}',
+  ip TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_org_created ON audit_log (org_id, created_at DESC);
+
+-- Per-rule sustain window in seconds (NULL = use the org default, see alertSustainSeconds).
+ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS sustain_seconds INTEGER;
+
+-- Alert channel kinds: add ntfy, pushover, telegram, pagerduty (idempotent: drop and re-add the CHECK).
+ALTER TABLE alert_channels DROP CONSTRAINT IF EXISTS alert_channels_kind_check;
+ALTER TABLE alert_channels ADD CONSTRAINT alert_channels_kind_check
+  CHECK (kind IN ('smtp', 'slack', 'discord', 'sms', 'ntfy', 'pushover', 'telegram', 'pagerduty'));
+
+-- Synthetic uptime checks (http / tcp / tls), run by the in-hub scheduler. last_run_at doubles as the
+-- claim token (compare-and-swap) so a tick runs once across restarts. failing_since starts the
+-- sustain window for the "down" alarm.
+CREATE TABLE IF NOT EXISTS uptime_checks (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('http', 'tcp', 'tls')),
+  target TEXT NOT NULL,
+  interval_seconds INTEGER NOT NULL DEFAULT 60,
+  timeout_ms INTEGER NOT NULL DEFAULT 5000,
+  expected_status INTEGER,
+  tls_warn_days INTEGER NOT NULL DEFAULT 14,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  last_run_at TIMESTAMPTZ,
+  last_status TEXT CHECK (last_status IN ('up', 'down')),
+  last_latency_ms INTEGER,
+  last_error TEXT,
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  failing_since TIMESTAMPTZ,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_uptime_checks_org ON uptime_checks (org_id);

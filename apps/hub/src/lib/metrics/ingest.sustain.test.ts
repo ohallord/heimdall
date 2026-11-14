@@ -101,4 +101,40 @@ describe("alert sustain window in metrics ingest", () => {
     await ingestCpuAt(0, 99);
     expect((await cpuEvents()).length).toBeGreaterThanOrEqual(1);
   });
+
+  it("applies a per-rule window: two rules, one agent, different windows", async () => {
+    await setAlertSustainSeconds(orgId, 120);
+    await ingestCpuAt(0, 12); // creates the default host rules
+    const db = await getDb();
+    // CPU alerts after 30s; memory keeps the org default (null = 120s).
+    await db.query(`UPDATE alert_rules SET sustain_seconds = 30 WHERE org_id = $1 AND metric = 'cpu_percent'`, [orgId]);
+    const breach = async (offsetSec: number) => {
+      vi.setSystemTime(T0 + offsetSec * 1000);
+      await ingestAgentMetrics({ agentId, cpuPercent: 99, memPercent: 99 });
+      await new Promise((res) => setImmediate(res));
+    };
+    const events = async (prefix: string) =>
+      (
+        await db.query<{ message: string }>(
+          `SELECT message FROM alert_events WHERE org_id = $1 AND message LIKE $2`,
+          [orgId, `${prefix}%`],
+        )
+      ).rows;
+
+    await breach(10);
+    await breach(45); // 35s into the breach: CPU window (30s) passed, memory (120s) has not
+    expect((await events("cpu_percent")).length).toBeGreaterThanOrEqual(1);
+    expect(await events("mem_percent")).toEqual([]);
+    await breach(135); // 125s in: memory now fires too
+    expect((await events("mem_percent")).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("a per-rule window of 0 alerts immediately even when the org default is long", async () => {
+    await setAlertSustainSeconds(orgId, 600);
+    await ingestCpuAt(0, 12);
+    const db = await getDb();
+    await db.query(`UPDATE alert_rules SET sustain_seconds = 0 WHERE org_id = $1 AND metric = 'cpu_percent'`, [orgId]);
+    await ingestCpuAt(10, 99);
+    expect((await cpuEvents()).length).toBeGreaterThanOrEqual(1);
+  });
 });

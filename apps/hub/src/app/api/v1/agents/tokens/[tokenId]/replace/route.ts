@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit/log";
 import { apiError } from "@/lib/http-guard/api-error";
 import { requireSession } from "@/lib/auth/session";
 import { createAgentToken, getAgentToken, revokeAgentToken } from "@/lib/db/store";
@@ -31,6 +32,13 @@ async function postHandler(request: Request, ctx: Ctx) {
       createdBy: session.userId,
       expiresAt: lifetimeMs ? new Date(Date.now() + lifetimeMs) : null,
       maxUses: old.max_uses ?? null,
+    });
+    await recordAudit({
+      session,
+      request,
+      action: "agent_token.replace",
+      target: row.id,
+      detail: { replaced: old.id, name: row.name },
     });
     return NextResponse.json(
       {

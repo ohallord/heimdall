@@ -1,4 +1,5 @@
 import { mutating } from "@/lib/http-guard/mutating";
+import { recordAudit } from "@/lib/audit/log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
@@ -29,7 +30,7 @@ const restoreSchema = z.object({
     alertChannels: z
       .array(
         z.object({
-          kind: z.enum(["smtp", "slack", "discord", "sms"]),
+          kind: z.enum(["smtp", "slack", "discord", "sms", "ntfy", "pushover", "telegram", "pagerduty"]),
           enabled: z.boolean().optional(),
           config,
         }),
@@ -88,6 +89,8 @@ function restoreUrls(b: z.infer<typeof restoreSchema>["backup"]): string[] {
     if (url) out.push(url);
     const api = str(ch.config.apiBaseUrl);
     if (api) out.push(api);
+    const server = str(ch.config.serverUrl);
+    if (server) out.push(server);
     const host = str(ch.config.host);
     if (ch.kind === "smtp" && host) out.push(smtpProbeUrl(host, Number(ch.config.port) || undefined));
   }
@@ -111,6 +114,7 @@ export async function GET(request: Request) {
       orgId: session.orgId!,
       includeSecrets,
     });
+    await recordAudit({ session, request, action: "backup.export", detail: { includeSecrets } });
     return NextResponse.json({ backup });
   } catch (err) {
     const status = (err as { status?: number }).status ?? 500;
@@ -135,6 +139,7 @@ async function postHandler(request: Request) {
       orgId: session.orgId!,
       backup: body.data.backup as BackupPayload,
     });
+    await recordAudit({ session, request, action: "backup.restore", detail: { result } });
     return NextResponse.json({ restored: result });
   } catch (err) {
     const status = (err as { status?: number }).status ?? 500;

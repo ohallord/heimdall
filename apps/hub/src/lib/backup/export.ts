@@ -58,7 +58,7 @@ export type BackupPayload = {
 };
 
 /** Keys whose values are credentials. Webhook URLs (Slack/Discord) embed their secret too. */
-const SECRET_KEY = /(token|pass(word)?|secret|api[-_]?key|auth|credential|private|^url$|webhook)/i;
+const SECRET_KEY = /(token|pass(word)?|secret|api[-_]?key|routing[-_]?key|user[-_]?key|auth|credential|private|^url$|webhook)/i;
 
 /** Deep redaction: any nested key that looks like a credential becomes "[redacted]". */
 export function redactConfig(

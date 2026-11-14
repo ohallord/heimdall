@@ -1,4 +1,5 @@
 import { mutating } from "@/lib/http-guard/mutating";
+import { recordAudit } from "@/lib/audit/log";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/http-guard/api-error";
 import { setupClosed } from "@/lib/auth/setup-guard";
@@ -80,6 +81,16 @@ async function postHandler(request: Request) {
       });
     }
 
+    await recordAudit({
+      session,
+      request,
+      action: "security.connection.add",
+      detail: {
+        via: "setup",
+        github: body.data.github?.org,
+        gitlab: body.data.gitlab?.projectPath,
+      },
+    });
     await setSetupStep("mfa");
     return NextResponse.json({ nextStep: "mfa" });
   } catch (err) {

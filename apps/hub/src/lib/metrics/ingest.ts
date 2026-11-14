@@ -537,7 +537,10 @@ export async function ingestAgentMetrics(
   // Phase 26: track which alert identities are still breaching vs. seen healthy.
   const breaching = new Set<string>();
   const healthy = new Set<string>();
-  const sustainMs = (await getAlertSustainSeconds(agent.org_id)) * 1000;
+  const orgSustainMs = (await getAlertSustainSeconds(agent.org_id)) * 1000;
+  // A rule's own window (sustain_seconds) wins over the org default; null = org default.
+  const sustainMsFor = (rule: { sustain_seconds?: number | null }) =>
+    rule.sustain_seconds != null ? rule.sustain_seconds * 1000 : orgSustainMs;
   const sampledAt = Date.now();
   for (const sample of thresholdSamples) {
     for (const rule of rules) {
@@ -599,7 +602,7 @@ export async function ingestAgentMetrics(
         // Offline agents already wait agent_offline_minutes; every other breach must be sustained.
         if (
           rule.metric !== "agent_offline_minutes" &&
-          !breachSustained(fingerprint, sampledAt, sustainMs)
+          !breachSustained(fingerprint, sampledAt, sustainMsFor(rule))
         ) {
           continue;
         }

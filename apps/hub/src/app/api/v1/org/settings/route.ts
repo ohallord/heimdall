@@ -1,4 +1,5 @@
 import { mutating } from "@/lib/http-guard/mutating";
+import { recordAudit } from "@/lib/audit/log";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/http-guard/api-error";
 import { z } from "zod";
@@ -116,6 +117,13 @@ async function patchHandler(request: Request) {
       );
     }
 
+    await recordAudit({
+      session,
+      request,
+      action: "org.settings.update",
+      target: orgId,
+      detail: body.data,
+    });
     return NextResponse.json({
       metricsRetentionDays,
       logsRetentionDays,

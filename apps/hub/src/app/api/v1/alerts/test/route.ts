@@ -20,6 +20,8 @@ const schema = z.object({
   metric: z.string().default("agent_offline_minutes"),
   value: z.number().default(10),
   dryRun: z.boolean().optional().default(true),
+  /** Only test this channel kind (e.g. "ntfy"); default is every enabled channel. */
+  channel: z.enum(["smtp", "slack", "discord", "sms", "ntfy", "pushover", "telegram", "pagerduty"]).optional(),
 });
 
 async function postHandler(request: Request) {
@@ -60,7 +62,10 @@ async function postHandler(request: Request) {
       ],
     };
 
-    const channels = await listAlertChannels(session.orgId!);
+    const allChannels = await listAlertChannels(session.orgId!);
+    const channels = body.data.channel
+      ? allChannels.filter((c) => c.kind === body.data.channel)
+      : allChannels;
     const prefs = await listNotificationPrefs(session.orgId!);
     let results: { ok: boolean; channel: string; detail?: string }[] =
       channels.map((c) => ({
