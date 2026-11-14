@@ -1,4 +1,4 @@
-/** Server start hooks: retention purge (Phase 25) and the insecure bootstrap token warning (Phase 32). */
+/** Server start hooks: retention purge (Phase 25), the insecure bootstrap token warning (Phase 32), and the security sync schedule. */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
@@ -16,6 +16,13 @@ export async function register() {
       })
       .catch(() => {});
   }, 5_000).unref?.();
+
+  // Scheduled GitHub/GitLab remote security sync (per-org cron, Dashboard → Admin).
+  if (process.env.HEIMDALL_DISABLE_SECURITY_SYNC_JOB !== "1") {
+    import("@/lib/security/schedule")
+      .then(({ startSecuritySyncScheduler }) => startSecuritySyncScheduler())
+      .catch((err) => console.error("[security-sync] scheduler failed to start", err));
+  }
 
   if (process.env.HEIMDALL_DISABLE_PURGE_JOB === "1") return;
   const { purgeAllOrgs } = await import("@/lib/metrics/retention");

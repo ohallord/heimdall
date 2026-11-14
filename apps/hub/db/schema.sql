@@ -403,3 +403,20 @@ CREATE TABLE IF NOT EXISTS hub_bootstrap (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
 -- Security review: last accepted TOTP time step (blocks code replay inside the window).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step BIGINT;
+
+-- Scheduled GitHub/GitLab remote security sync (per org, crontab in the hub time zone).
+-- next_run_at is claimed with a conditional UPDATE so a tick runs once, across restarts.
+CREATE TABLE IF NOT EXISTS security_sync_schedules (
+  org_id TEXT PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+  cron TEXT NOT NULL DEFAULT '0 8 * * *',
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  time_zone TEXT,
+  next_run_at TIMESTAMPTZ,
+  last_run_at TIMESTAMPTZ,
+  last_run_status TEXT CHECK (last_run_status IN ('running', 'ok', 'warnings', 'error')),
+  last_run_written INTEGER,
+  last_run_warnings TEXT NOT NULL DEFAULT '[]',
+  last_run_duration_ms INTEGER,
+  updated_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
