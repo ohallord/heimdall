@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AgentTokensPanel } from "@/components/agent-tokens-panel";
+import { AlertSustainForm } from "@/components/alert-sustain-form";
 import { BootstrapWarning } from "@/components/bootstrap-warning";
 import { bootstrapStatus } from "@/lib/agents/bootstrap";
 import { can } from "@/lib/rbac/permissions";
@@ -25,6 +26,7 @@ import {
   getTracesRetentionDays,
 } from "@/lib/metrics/retention";
 import { getSecuritySyncSchedule } from "@/lib/security/schedule";
+import { getAlertSustainSeconds } from "@/lib/alerts/sustain-settings";
 import { getCriticalFindingsToAlarms } from "@/lib/security/settings";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +74,9 @@ export default async function SettingsPage() {
   const criticalFindingsToAlarms = session.orgId
     ? await getCriticalFindingsToAlarms(session.orgId)
     : true;
+  const alertSustainSeconds = session.orgId
+    ? await getAlertSustainSeconds(session.orgId)
+    : 120;
   const securitySyncSchedule = session.orgId
     ? await getSecuritySyncSchedule(session.orgId)
     : null;
@@ -125,6 +130,8 @@ export default async function SettingsPage() {
         initialTracesDays={tracesRetentionDays}
         canEdit={canEditThresholds}
       />
+
+      <AlertSustainForm initialSeconds={alertSustainSeconds} canEdit={canEditThresholds} />
 
       <CriticalFindingsAlarmsForm
         initialEnabled={criticalFindingsToAlarms}

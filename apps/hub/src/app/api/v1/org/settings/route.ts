@@ -12,6 +12,11 @@ import {
   setTracesRetentionDays,
 } from "@/lib/metrics/retention";
 import {
+  MAX_ALERT_SUSTAIN_SECONDS,
+  getAlertSustainSeconds,
+  setAlertSustainSeconds,
+} from "@/lib/alerts/sustain-settings";
+import {
   getCriticalFindingsToAlarms,
   setCriticalFindingsToAlarms,
 } from "@/lib/security/settings";
@@ -24,13 +29,15 @@ const patchSchema = z
     logsRetentionDays: z.number().finite().optional(),
     tracesRetentionDays: z.number().finite().optional(),
     criticalFindingsToAlarms: z.boolean().optional(),
+    alertSustainSeconds: z.number().int().min(0).max(MAX_ALERT_SUSTAIN_SECONDS).optional(),
   })
   .refine(
     (v) =>
       v.metricsRetentionDays !== undefined ||
       v.logsRetentionDays !== undefined ||
       v.tracesRetentionDays !== undefined ||
-      v.criticalFindingsToAlarms !== undefined,
+      v.criticalFindingsToAlarms !== undefined ||
+      v.alertSustainSeconds !== undefined,
     { message: "at least one setting required" },
   );
 
@@ -43,17 +50,20 @@ export async function GET() {
       logsRetentionDays,
       tracesRetentionDays,
       criticalFindingsToAlarms,
+      alertSustainSeconds,
     ] = await Promise.all([
         getMetricsRetentionDays(orgId),
         getLogsRetentionDays(orgId),
         getTracesRetentionDays(orgId),
         getCriticalFindingsToAlarms(orgId),
+        getAlertSustainSeconds(orgId),
       ]);
     return NextResponse.json({
       metricsRetentionDays,
       logsRetentionDays,
       tracesRetentionDays,
       criticalFindingsToAlarms,
+      alertSustainSeconds,
     });
   } catch (err) {
     return apiError(err);
@@ -73,6 +83,7 @@ async function patchHandler(request: Request) {
     let logsRetentionDays = await getLogsRetentionDays(orgId);
     let tracesRetentionDays = await getTracesRetentionDays(orgId);
     let criticalFindingsToAlarms = await getCriticalFindingsToAlarms(orgId);
+    let alertSustainSeconds = await getAlertSustainSeconds(orgId);
 
     if (body.data.logsRetentionDays !== undefined) {
       logsRetentionDays = await setLogsRetentionDays(
@@ -98,12 +109,19 @@ async function patchHandler(request: Request) {
         body.data.criticalFindingsToAlarms,
       );
     }
+    if (body.data.alertSustainSeconds !== undefined) {
+      alertSustainSeconds = await setAlertSustainSeconds(
+        orgId,
+        body.data.alertSustainSeconds,
+      );
+    }
 
     return NextResponse.json({
       metricsRetentionDays,
       logsRetentionDays,
       tracesRetentionDays,
       criticalFindingsToAlarms,
+      alertSustainSeconds,
     });
   } catch (err) {
     return apiError(err);

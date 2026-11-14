@@ -26,6 +26,8 @@ export type OrgSettingsJson = {
   tracesRetentionDays?: number;
   /** When true (default), new critical findings open Alarms. */
   criticalFindingsToAlarms?: boolean;
+  /** Seconds a breach must last before an alert opens (0 = immediately). Default 120. */
+  alertSustainSeconds?: number;
 };
 
 export function clampRetentionDays(days: number): number {

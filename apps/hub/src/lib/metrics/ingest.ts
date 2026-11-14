@@ -20,6 +20,8 @@ import {
   metricLabel,
 } from "@/lib/alerts/format";
 import { buildRecoveryPayloads } from "@/lib/alerts/recovery";
+import { getAlertSustainSeconds } from "@/lib/alerts/sustain-settings";
+import { breachSustained, clearBreach, markBreach } from "@/lib/alerts/sustain";
 import { areAlertsPaused } from "@/lib/alerts/pause";
 import { enqueueAlert } from "@/lib/alerts/queue";
 import { getDb } from "@/lib/db/client";
@@ -535,19 +537,23 @@ export async function ingestAgentMetrics(
   // Phase 26: track which alert identities are still breaching vs. seen healthy.
   const breaching = new Set<string>();
   const healthy = new Set<string>();
+  const sustainMs = (await getAlertSustainSeconds(agent.org_id)) * 1000;
+  const sampledAt = Date.now();
   for (const sample of thresholdSamples) {
     for (const rule of rules) {
       if (!rule.enabled || !ruleMatchesMetric(rule.metric, sample.metric)) continue;
       const b = evaluateRuleBand(rule, sample);
       const over = b != null ? b !== "green" : evaluateRule(rule, sample);
-      (over ? breaching : healthy).add(
-        alertFingerprint({
-          orgId: agent.org_id,
-          ruleOrSource: rule.id,
-          agentOrAlarmId: agentId,
-          metricOrName: sample.metric,
-        }),
-      );
+      const fp = alertFingerprint({
+        orgId: agent.org_id,
+        ruleOrSource: rule.id,
+        agentOrAlarmId: agentId,
+        metricOrName: sample.metric,
+      });
+      (over ? breaching : healthy).add(fp);
+      // Sustain window: a healthy sample resets the clock, a breaching one advances it.
+      if (over) markBreach(fp, sampledAt);
+      else clearBreach(fp);
     }
   }
   const resolved = await resolveRecoveredAlerts({
@@ -584,6 +590,20 @@ export async function ingestAgentMetrics(
           isAlarm = true;
         }
 
+        const fingerprint = alertFingerprint({
+          orgId: agent.org_id,
+          ruleOrSource: rule.id,
+          agentOrAlarmId: agentId,
+          metricOrName: sample.metric,
+        });
+        // Offline agents already wait agent_offline_minutes; every other breach must be sustained.
+        if (
+          rule.metric !== "agent_offline_minutes" &&
+          !breachSustained(fingerprint, sampledAt, sustainMs)
+        ) {
+          continue;
+        }
+
         const coolKey = alertCooldownKey({
           orgId: agent.org_id,
           ruleId: rule.id,
@@ -592,12 +612,6 @@ export async function ingestAgentMetrics(
         });
         if (!shouldFireAlert(coolKey)) continue;
 
-        const fingerprint = alertFingerprint({
-          orgId: agent.org_id,
-          ruleOrSource: rule.id,
-          agentOrAlarmId: agentId,
-          metricOrName: sample.metric,
-        });
         if (await isFingerprintMuted(agent.org_id, fingerprint)) {
           continue;
         }
