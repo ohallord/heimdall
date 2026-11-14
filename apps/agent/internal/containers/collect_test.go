@@ -3,6 +3,7 @@ package containers
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestMarkRestartLoops(t *testing.T) {
@@ -17,6 +18,26 @@ func TestMarkRestartLoops(t *testing.T) {
 	}
 	if !items[1].RestartLoop || !items[2].RestartLoop {
 		t.Fatal("expected restart loop flags")
+	}
+}
+
+// A container that restarted a few times long ago and has been up for hours
+// is not in a restart loop; the lifetime count alone must not keep it flagged.
+func TestMarkRestartLoopsIgnoresStaleRestarts(t *testing.T) {
+	now := time.Date(2026, 11, 14, 17, 28, 0, 0, time.UTC)
+	items := []Snapshot{
+		{ID: "stable", State: "running", RestartCount: 6, StartedAt: "2026-11-14T11:03:13.355101474Z"},
+		{ID: "fresh", State: "running", RestartCount: 6, StartedAt: "2026-11-14T17:25:00Z"},
+		{ID: "gaveup", State: "exited", RestartCount: 5, StartedAt: "2026-11-14T09:00:00Z", FinishedAt: "2026-11-14T09:00:05Z"},
+		{ID: "justdied", State: "exited", RestartCount: 5, StartedAt: "2026-11-14T17:20:00Z", FinishedAt: "2026-11-14T17:27:00Z"},
+		{ID: "unknown", State: "running", RestartCount: 4, StartedAt: "0001-01-01T00:00:00Z"},
+	}
+	markRestartLoopsAt(items, now)
+	want := map[string]bool{"stable": false, "fresh": true, "gaveup": false, "justdied": true, "unknown": true}
+	for _, it := range items {
+		if it.RestartLoop != want[it.ID] {
+			t.Errorf("%s: restartLoop=%v want %v", it.ID, it.RestartLoop, want[it.ID])
+		}
 	}
 }
 

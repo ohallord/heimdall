@@ -26,6 +26,10 @@ user or group syncs each project in it (first 100). Findings are keyed `<repo>/<
 
 0 findings with 0 warnings is a real result: no open alerts on the connected remotes.
 
+Closed alerts: after a sync, open `github` / `gitlab` findings the remotes no longer return are marked
+resolved. A kind is skipped if any of its connections warned, failed, or lacks a token, so a partial
+sync never hides real alerts. If closed alerts stay listed, clear that kind's warnings and sync again.
+
 ## Deploying the fix on homelab
 
 `scripts/deploy-cluster.sh` imports images with `sudo k3s ctr`. Over non-interactive ssh it fails with

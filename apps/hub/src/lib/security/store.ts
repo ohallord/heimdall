@@ -249,3 +249,33 @@ export async function listFindings(
   );
   return result.rows;
 }
+
+/**
+ * Resolve open findings from `source` (org-wide, no agent) that a full remote
+ * sync did not return: the alert was closed or fixed upstream.
+ */
+export async function resolveUnseenFindings(
+  orgId: string,
+  source: VulnSource,
+  seen: NormalizedFinding[],
+): Promise<number> {
+  const db = await getDb();
+  const keep = new Set(
+    seen.filter((f) => f.source === source).map((f) => `${f.externalId}\u0000${f.resource}`),
+  );
+  const open = await db.query<Pick<VulnFindingRow, "id" | "external_id" | "resource">>(
+    `SELECT id, external_id, resource FROM vuln_findings
+     WHERE org_id = $1 AND source = $2 AND agent_key = '' AND status = 'open'`,
+    [orgId, source],
+  );
+  const stale = open.rows
+    .filter((r) => !keep.has(`${r.external_id}\u0000${r.resource}`))
+    .map((r) => r.id);
+  if (stale.length === 0) return 0;
+  await db.query(
+    `UPDATE vuln_findings SET status = 'resolved', resolved_at = NOW()
+     WHERE org_id = $1 AND id = ANY($2::text[])`,
+    [orgId, stale],
+  );
+  return stale.length;
+}
