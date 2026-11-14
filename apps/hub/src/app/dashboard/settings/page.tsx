@@ -7,6 +7,7 @@ import { CriticalFindingsAlarmsForm } from "@/components/critical-findings-alarm
 import { HostThresholdForm } from "@/components/host-threshold-form";
 import { IntegrationsForm } from "@/components/integrations-form";
 import { MetricsRetentionForm } from "@/components/metrics-retention-form";
+import { SecuritySyncSchedulePanel } from "@/components/security-sync-schedule-panel";
 import { NotificationPrefsForm } from "@/components/notification-prefs-form";
 import { getSession } from "@/lib/auth/session";
 import {
@@ -23,6 +24,7 @@ import {
   getMetricsRetentionDays,
   getTracesRetentionDays,
 } from "@/lib/metrics/retention";
+import { getSecuritySyncSchedule } from "@/lib/security/schedule";
 import { getCriticalFindingsToAlarms } from "@/lib/security/settings";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +72,10 @@ export default async function SettingsPage() {
   const criticalFindingsToAlarms = session.orgId
     ? await getCriticalFindingsToAlarms(session.orgId)
     : true;
+  const securitySyncSchedule = session.orgId
+    ? await getSecuritySyncSchedule(session.orgId)
+    : null;
+  const canEditSchedule = Boolean(session.role && can(session.role, "settings:write"));
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-10">
@@ -82,7 +88,8 @@ export default async function SettingsPage() {
         </h1>
         <p className="mt-2 text-sm text-muted">
           Per-user channel preferences, quiet hours, host warn/alarm bands,
-          metric history retention, critical findings → Alarms, and UniFi /
+          metric history retention, critical findings → Alarms, the scheduled
+          GitHub / GitLab security sync, and UniFi /
           OTEL / runtime integration tokens. Critical alerts still fire during
           quiet hours.
         </p>
@@ -123,6 +130,10 @@ export default async function SettingsPage() {
         initialEnabled={criticalFindingsToAlarms}
         canEdit={canEditThresholds}
       />
+
+      {securitySyncSchedule ? (
+        <SecuritySyncSchedulePanel initial={securitySyncSchedule} canEdit={canEditSchedule} />
+      ) : null}
 
       <IntegrationsForm canWrite={canWriteIntegrations} />
 

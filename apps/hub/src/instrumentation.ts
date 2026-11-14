@@ -17,7 +17,7 @@ export async function register() {
       .catch(() => {});
   }, 5_000).unref?.();
 
-  // Scheduled GitHub/GitLab remote security sync (per-org cron, Dashboard → Admin).
+  // Scheduled GitHub/GitLab remote security sync (per-org cron, Dashboard → Settings).
   if (process.env.HEIMDALL_DISABLE_SECURITY_SYNC_JOB !== "1") {
     import("@/lib/security/schedule")
       .then(({ startSecuritySyncScheduler }) => startSecuritySyncScheduler())

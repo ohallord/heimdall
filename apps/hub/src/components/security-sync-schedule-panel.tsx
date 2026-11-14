@@ -26,7 +26,13 @@ const STATUS_CLASS: Record<string, string> = {
   running: "text-muted",
 };
 
-export function SecuritySyncSchedulePanel({ initial }: { initial: SecuritySyncScheduleView }) {
+export function SecuritySyncSchedulePanel({
+  initial,
+  canEdit,
+}: {
+  initial: SecuritySyncScheduleView;
+  canEdit: boolean;
+}) {
   const [view, setView] = useState(initial);
   const [cron, setCron] = useState(initial.cron);
   const [enabled, setEnabled] = useState(initial.enabled);
@@ -82,7 +88,12 @@ export function SecuritySyncSchedulePanel({ initial }: { initial: SecuritySyncSc
       </header>
 
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={!canEdit}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
         Enabled
       </label>
 
@@ -93,6 +104,7 @@ export function SecuritySyncSchedulePanel({ initial }: { initial: SecuritySyncSc
           value={cron}
           onChange={(e) => setCron(e.target.value)}
           spellCheck={false}
+          readOnly={!canEdit}
           aria-invalid={invalid ? true : undefined}
           className="mt-1 w-full border border-border bg-white px-3 py-2 font-mono text-sm"
         />
@@ -121,7 +133,11 @@ export function SecuritySyncSchedulePanel({ initial }: { initial: SecuritySyncSc
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      {canEdit ? null : (
+        <p className="text-xs text-muted">Changing the schedule requires the admin role.</p>
+      )}
+
+      <div className={canEdit ? "flex flex-wrap items-center gap-2" : "hidden"}>
         <button
           type="button"
           disabled={busy || !!invalid || !dirty}

@@ -29,7 +29,7 @@ user or group syncs each project in it (first 100). Findings are keyed `<repo>/<
 ## Schedule
 
 The hub also runs the remote sync on a per-org crontab schedule. **Default: `0 8 * * *`** (daily at
-08:00), enabled. Edit it on **Dashboard → Admin → Scheduled security sync**: cron expression
+08:00), enabled. Edit it on **Dashboard → Settings → Scheduled security sync** (admins edit; other roles see it read-only): cron expression
 (5 fields: minute hour day month weekday), enable toggle, the next three runs, and the last run's
 time, status (`ok` / `warnings` / `error`), findings written and warnings.
 
