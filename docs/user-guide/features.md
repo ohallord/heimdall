@@ -30,7 +30,7 @@ Built from the in-cluster agent. Pod detail pages (`/dashboard/k8s/pods/<ns>/<na
 
 ## Containers (`/dashboard/containers`)
 
-A fleet-wide table of Docker and Podman containers: state, restart count, OOM kills, exit code, CPU %, and memory as a percentage of the container's limit. Alarms fire for containers that **exit abnormally while being monitored**, OOM kills, restart loops, and memory at or above 90% of the limit.
+A fleet-wide table of Docker and Podman containers: state, restart count, OOM kills, exit code, CPU %, and memory as a percentage of the container's limit. Alarms fire for containers that **exit abnormally while being monitored**, OOM kills, restart loops (three or more restarts within the last 10 minutes, not the lifetime restart count), and memory at or above 90% of the limit.
 
 ## Network (`/dashboard/network`)
 

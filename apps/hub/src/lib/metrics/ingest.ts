@@ -121,6 +121,8 @@ export function samplesFromMetrics(input: MetricsIngestInput): ThresholdSample[]
   return samples;
 }
 
+const RESTART_LOOP_COUNT_FALLBACK = 3;
+
 export function samplesFromContainers(
   containers: ContainerMetric[],
 ): ThresholdSample[] {
@@ -135,7 +137,12 @@ export function samplesFromContainers(
     if (c.oomKilled) {
       samples.push({ metric: "container_oom", value: 1 });
     }
-    if (c.restartLoop || state === "restarting" || (c.restartCount ?? 0) >= 3) {
+    // The agent sets restartLoop only for restarts within its window; Docker's
+    // restartCount is lifetime and survives reboots, so it is a fallback only
+    // for agents that do not send the flag.
+    const looping =
+      c.restartLoop ?? (c.restartCount ?? 0) >= RESTART_LOOP_COUNT_FALLBACK;
+    if (looping || state === "restarting") {
       samples.push({ metric: "container_restart_loop", value: 1 });
     }
     if (c.memPercent != null && Number.isFinite(c.memPercent)) {

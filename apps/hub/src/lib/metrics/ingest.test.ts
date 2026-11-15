@@ -364,6 +364,32 @@ describe("metrics ingest contract", () => {
     );
   });
 
+  it("does not flag a restart loop from a stale lifetime restart count", () => {
+    // After a host reboot Docker keeps the lifetime RestartCount (6 here) while the
+    // agent, which windows restarts, reports restartLoop:false. The hub must trust
+    // that flag, or the alert re-fires every cooldown forever.
+    const samples = samplesFromContainers([
+      {
+        id: "cf",
+        name: "heimdall-mcp-cloudflared",
+        image: "cloudflare/cloudflared:2026.10.7",
+        state: "running",
+        status: "Up 18 hours",
+        restartCount: 6,
+        restartLoop: false,
+        startedAt: "2026-11-14T11:03:13.355101474Z",
+      },
+    ]);
+    expect(samples).not.toContainEqual({ metric: "container_restart_loop", value: 1 });
+  });
+
+  it("falls back to the restart count when an agent sends no restartLoop flag", () => {
+    const samples = samplesFromContainers([
+      { id: "w", name: "worker", image: "w:1", state: "running", status: "Up", restartCount: 4 },
+    ]);
+    expect(samples).toContainEqual({ metric: "container_restart_loop", value: 1 });
+  });
+
   describe("markContainerExitAlerts", () => {
     const base = { image: "img:1", status: "", restartCount: 0 };
     const prevAt = "2026-11-01T10:00:00.000Z";
