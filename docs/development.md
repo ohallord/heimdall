@@ -29,7 +29,7 @@ npm run lint
 npm run build
 ```
 
-Default test DB is PGlite (`HEIMDALL_DB_DRIVER=pglite`). Schema: `apps/hub/db/schema.sql`.
+Default test DB is PGlite (`HEIMDALL_DB_DRIVER=pglite`). PGlite is in memory and not shared across the hub's page and API bundles, so use Postgres (`DATABASE_URL`) when running a real `next start` instance, for example to capture screenshots. Schema: `apps/hub/db/schema.sql`.
 
 ## Agent
 
@@ -43,8 +43,10 @@ go build -o bin/heimdall-agent ./cmd/agent
 
 - Conventional commits (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`).
 - Prefer small focused commits per subsystem.
-- Update Agent Store `discussion-log.md` at each phase boundary.
-- Health endpoint reports `phase` (currently `8`).
+- Update `docs/phases/STATUS.md` at each phase boundary (private repo).
+- The health endpoint's `phase` field is a legacy constant and does not track feature phases.
+- Edit docs and the README in the private repo only. The public repo is a snapshot rebuilt by `scripts/publish.sh`; the public README is `.publish/PUBLIC_README.md`.
+- Screenshots in `docs/screenshots/` must use synthetic data only (fake hosts, `example.com`, no real emails or IPs).
 
 ## Deploy docs
 

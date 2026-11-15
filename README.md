@@ -13,11 +13,35 @@ Self-hosted monitoring hub with outbound-only agents for host, container, and Ku
 
 I built this to watch my own lab from one place without poking holes in every host firewall.
 
+## What it does
+
+- **Fleet:** servers, containers and Kubernetes clusters with problems-first status bands and 60-day metric history.
+- **Alerting:** per-rule sustain window, auto-recovery, mute and quiet hours. Channels: email, Slack, Discord, SMS, ntfy, Pushover, Telegram and PagerDuty.
+- **Uptime:** synthetic HTTP, TCP and TLS-certificate checks run by the hub.
+- **Security:** Trivy findings, host posture, scheduled GitHub and GitLab sync (paginated; findings closed upstream resolve here), runtime and network exposure.
+- **Observability:** OTLP metrics, logs and traces, with an APM service list and span waterfalls.
+- **Operations:** audit log of administrative changes, backup/restore, OIDC SSO, MFA (TOTP and passkeys), per-agent tokens.
+- **Integrations:** UniFi Alarm Manager webhooks and a read-only MCP endpoint for AI assistants.
+
 ## Screenshots
 
-![Bifrost Beacon brand sheet](docs/screenshots/brand-sheet.png)
+All captures use synthetic demo data (fake hosts, `example.com` targets).
 
-Brand mark is **Concept B — Bifrost Beacon** (Dan-approved). Favicon uses the tower plus the outer purple arc only. App header, OG image, and favicon ship from `assets/brand/`. Synthetic brand sheet above; product UI screenshots from a recorded lab walkthrough are still `TODO(Dan)`.
+![Fleet overview](docs/screenshots/fleet.png)
+
+![Host detail](docs/screenshots/host-detail.png)
+
+![Alarm console](docs/screenshots/alerts.png)
+
+![Synthetic uptime checks](docs/screenshots/uptime.png)
+
+![Alert sustain window and scheduled security sync](docs/screenshots/settings.png)
+
+![Audit log](docs/screenshots/audit-log.png)
+
+The brand mark is **Bifrost Beacon**; the master sheet is in `assets/brand/`.
+
+![Bifrost Beacon brand sheet](docs/screenshots/brand-sheet.png)
 
 ## Architecture
 
@@ -30,7 +54,7 @@ flowchart LR
   end
   H[Heimdall hub]
   DB[(Postgres or PGlite)]
-  AL[Alerts SMTP / Slack / Discord / SMS]
+  AL[Alerts: email, chat, push, SMS, PagerDuty]
   A1 -->|HTTPS register + metrics + logs| H
   A2 -->|HTTPS outbound only| H
   A3 -->|HTTPS outbound only| H
@@ -38,7 +62,7 @@ flowchart LR
   H --> AL
 ```
 
-Agents connect **out** to the hub. The hub stores samples, evaluates alert rules, and fans out notifications. Optional OpenTelemetry Collector sidecars send OTLP/HTTP JSON to `/v1/metrics` and `/v1/logs`.
+Agents connect **out** to the hub. The hub stores samples, evaluates alert rules, and fans out notifications. The hub also runs synthetic uptime checks itself. Optional OpenTelemetry Collector sidecars send OTLP/HTTP JSON to `/v1/metrics`, `/v1/logs` and `/v1/traces`.
 
 ## Quick start (Docker Compose)
 
@@ -129,7 +153,7 @@ Each agent dials the hub. Host firewalls stay closed for Heimdall. That matches 
 
 ## Known limits
 
-- OTLP: HTTP JSON metrics + logs only. No traces, no gRPC, no protobuf.
+- OTLP: HTTP JSON only (metrics, logs, traces). No gRPC, no protobuf.
 - Default agent image is distroless and does not bundle Trivy; host posture needs a host Trivy binary.
 - Compose sample agent keeps Kubernetes scrape **off**. Helm chart defaults K8s scrape **on** for in-cluster agents.
 - Public releases are squashed snapshot commits from the private repo; they are not a 1:1 private history mirror.
@@ -143,6 +167,8 @@ cd apps/agent && go test ./...
 ./scripts/handshake-smoke.sh
 ./scripts/tests/run.sh
 ```
+
+Full documentation: [docs/README.md](docs/README.md) (user guide, API and configuration reference, design, runbooks).
 
 More detail: [docs/development.md](docs/development.md), [docs/deploy.md](docs/deploy.md), [docs/architecture.md](docs/architecture.md).
 

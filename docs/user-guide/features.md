@@ -6,6 +6,8 @@ Navigation: **Fleet · Servers · Kubernetes · Containers · Network · Service
 
 ## Fleet (`/dashboard`)
 
+![Fleet page with problems, counters and the server table](../screenshots/fleet.png)
+
 The home page. It shows:
 
 - **Servers**: every agent, with an online dot (online means a sample arrived in the last ~45 seconds) and the current CPU, memory and disk band. Click a host for its detail page.
@@ -13,6 +15,8 @@ The home page. It shows:
 - Open problems ranked above healthy items.
 
 ### Host detail (`/dashboard/hosts/<agent>`)
+
+![Host detail page](../screenshots/host-detail.png)
 
 - Current CPU, memory, load and per-mount disk usage, coloured by band
 - **Metric history** charts for CPU, memory and disk (separate pages per metric), kept for the metrics retention window (default 60 days)
@@ -57,6 +61,8 @@ Open a finding for details and to change its status (resolve). When **Critical f
 
 ## Uptime (`/dashboard/uptime`)
 
+![Uptime checks page](../screenshots/uptime.png)
+
 Synthetic checks run from the hub itself (no agent needed):
 
 | Type | Target | Down when |
@@ -87,6 +93,8 @@ Heimdall tokens (`hdt_`, `hda_`, `hdb_`, `hdo_`, `hdu_`, `hdr_`) are **redacted*
 
 ## Alarms (`/dashboard/alerts`)
 
+![Alarm console](../screenshots/alerts.png)
+
 The alarm console: open, muted, recovered and dismissed alerts from metric rules, log rules, UniFi and critical findings.
 
 - **Mute** an alarm for 15 minutes, 30 minutes, 1 hour or 4 hours. The mute applies to that alert's identity (same rule, host and metric), so repeats stay quiet.
@@ -99,6 +107,8 @@ The alarm console: open, muted, recovered and dismissed alerts from metric rules
 
 ## Settings (`/dashboard/settings`)
 
+![Alert sustain window and scheduled security sync settings](../screenshots/settings.png)
+
 | Section | Who | What |
 | --- | --- | --- |
 | Notification preferences | Everyone, for themselves | Which channels you want, your SMS number, quiet hours and timezone |
@@ -109,6 +119,8 @@ The alarm console: open, muted, recovered and dismissed alerts from metric rules
 | Integrations | Admin | Rotate OTel (`hdo_`), UniFi (`hdu_`) and runtime (`hdr_`) tokens; shows endpoint URLs |
 
 ## Admin (`/dashboard/admin`)
+
+![Audit log on the Admin page](../screenshots/audit-log.png)
 
 - **Identity**: add OIDC SSO providers (issuer, client ID and secret, scopes).
 - **Backup / restore**: export the organization's configuration as JSON (secrets redacted unless you ask for them) and restore it.

@@ -45,7 +45,7 @@ Deployment deep dive: [deploy.md](deploy.md) (every install path, request protec
 ## Operations
 
 Runbooks for specific incidents live in [`runbooks/`](runbooks/):
-[bootstrap and enrollment tokens](runbooks/bootstrap-token.md) · [security hardening symptoms](runbooks/security-hardening.md) · [Postgres recovery](runbooks/postgres-recovery.md) · [Helm upgrade with new values](runbooks/helm-upgrade-new-values.md)
+[bootstrap and enrollment tokens](runbooks/bootstrap-token.md) · [uptime checks](runbooks/uptime-checks.md) · [audit log](runbooks/audit-log.md) · [security sync](runbooks/security-sync.md) · [MCP exposure](runbooks/mcp-exposure.md) · [security hardening symptoms](runbooks/security-hardening.md) · [Postgres recovery](runbooks/postgres-recovery.md) · [Helm upgrade with new values](runbooks/helm-upgrade-new-values.md)
 
 ## Contributing
 
