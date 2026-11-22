@@ -56,5 +56,9 @@ grep -q 'http://heimdall-otelcol:4318' <<<"$out" || fail "beyla must export to n
 grep -q 'http/protobuf' <<<"$out" || fail "beyla protocol"
 grep -q 'k8s_namespace' <<<"$out" || fail "beyla discovery"
 grep -q 'k8s_deployment_name: "heimdall-hub"' <<<"$out" || fail "beyla must exclude the hub"
+# Beyla OOMKilled at 512Mi instrumenting every process on a node with CI runners.
+grep -A1 'limits:' <<<"$out" | grep -q 'memory: 1Gi' || fail "beyla default memory limit must be 1Gi"
+out=$(render --set otel.collector.enabled=true --set-string otel.collector.token=hdo_x --set otel.beyla.enabled=true --set 'otel.beyla.excludeNamespaces={arc-runners}')
+grep -q 'k8s_namespace: "arc-runners"' <<<"$out" || fail "beyla excludeNamespaces not rendered"
 out=$(render --set otel.collector.enabled=true --set-string otel.collector.token=hdo_x --set otel.collector.traces=false --set otel.beyla.enabled=true 2>&1) && fail "beyla with traces=false should fail"
 echo "ok"

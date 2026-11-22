@@ -96,6 +96,42 @@ describe("alert sustain window in metrics ingest", () => {
     expect((await cpuEvents()).length).toBeGreaterThanOrEqual(1);
   });
 
+  it("short, repeated k8s Pending blips never fire (healthy k8s samples reset the clock)", async () => {
+    await setAlertSustainSeconds(orgId, 120);
+    const k8sAt = async (offsetSec: number, podsPending: number) => {
+      vi.setSystemTime(T0 + offsetSec * 1000);
+      const r = await ingestAgentMetrics({
+        agentId,
+        cpuPercent: 5,
+        memPercent: 10,
+        kubernetes: {
+          clusterId: "default",
+          apiServerReachable: true,
+          nodesTotal: 1,
+          nodesReady: 1,
+          podsPending,
+          podsCrashLoop: 0,
+          deploymentsTotal: 1,
+          deploymentsUnhealthy: 0,
+        },
+      });
+      expect(r.ok).toBe(true);
+      await new Promise((res) => setImmediate(res));
+    };
+    // A CI runner pod sits Pending for a few seconds every ~2 minutes, healthy in between.
+    for (let t = 0; t <= 600; t += 120) {
+      await k8sAt(t, 1);
+      await k8sAt(t + 30, 0);
+    }
+    const db = await getDb();
+    const r = await db.query(
+      `SELECT 1 FROM alert_events WHERE org_id = $1 AND message LIKE 'k8s_pod_pending%'`,
+      [orgId],
+    );
+    expect(r.rows).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("a window of 0 alerts on the first breaching sample", async () => {
     await setAlertSustainSeconds(orgId, 0);
     await ingestCpuAt(0, 99);

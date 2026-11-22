@@ -229,25 +229,20 @@ export function samplesFromKubernetes(k8s: K8sClusterMetric): ThresholdSample[] 
   if (k8s.enabled === false) {
     return samples;
   }
-  if (!k8s.apiServerReachable) {
-    samples.push({ metric: "k8s_apiserver_unreachable", value: 1 });
-  }
-  const notReady = Math.max(0, (k8s.nodesTotal ?? 0) - (k8s.nodesReady ?? 0));
-  if (notReady > 0) {
-    samples.push({ metric: "k8s_node_not_ready", value: notReady });
-  }
-  if ((k8s.podsPending ?? 0) > 0) {
-    samples.push({ metric: "k8s_pod_pending", value: k8s.podsPending });
-  }
-  if ((k8s.podsCrashLoop ?? 0) > 0) {
-    samples.push({ metric: "k8s_pod_crashloop", value: k8s.podsCrashLoop });
-  }
-  if ((k8s.deploymentsUnhealthy ?? 0) > 0) {
-    samples.push({
-      metric: "k8s_deployment_unhealthy",
-      value: k8s.deploymentsUnhealthy,
-    });
-  }
+  // Always report each metric, 0 when healthy: a healthy sample is what resets the sustain clock
+  // and resolves an open alert. Omitting zeros made short, repeated blips (CI runner pods sitting
+  // Pending for a few seconds every couple of minutes) look like one continuous breach.
+  samples.push({ metric: "k8s_apiserver_unreachable", value: k8s.apiServerReachable ? 0 : 1 });
+  // While the API is down the counts are not trustworthy, so a 0 must not resolve an open alert:
+  // report only non-zero counts then.
+  const push = (metric: string, raw: number | undefined) => {
+    const value = Math.max(0, raw ?? 0);
+    if (value > 0 || k8s.apiServerReachable) samples.push({ metric, value });
+  };
+  push("k8s_node_not_ready", (k8s.nodesTotal ?? 0) - (k8s.nodesReady ?? 0));
+  push("k8s_pod_pending", k8s.podsPending);
+  push("k8s_pod_crashloop", k8s.podsCrashLoop);
+  push("k8s_deployment_unhealthy", k8s.deploymentsUnhealthy);
   return samples;
 }
 

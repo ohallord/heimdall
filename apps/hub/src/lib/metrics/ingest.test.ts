@@ -615,6 +615,42 @@ describe("metrics ingest contract", () => {
     );
   });
 
+  it("reports healthy kubernetes metrics as 0 so the sustain clock resets", () => {
+    const samples = samplesFromKubernetes({
+      clusterId: "default",
+      enabled: true,
+      apiServerReachable: true,
+      nodesTotal: 1,
+      nodesReady: 1,
+      podsPending: 0,
+      podsCrashLoop: 0,
+      deploymentsTotal: 4,
+      deploymentsUnhealthy: 0,
+    });
+    expect(samples).toEqual([
+      { metric: "k8s_apiserver_unreachable", value: 0 },
+      { metric: "k8s_node_not_ready", value: 0 },
+      { metric: "k8s_pod_pending", value: 0 },
+      { metric: "k8s_pod_crashloop", value: 0 },
+      { metric: "k8s_deployment_unhealthy", value: 0 },
+    ]);
+  });
+
+  it("does not report zero counts while the API server is unreachable", () => {
+    const samples = samplesFromKubernetes({
+      clusterId: "default",
+      enabled: true,
+      apiServerReachable: false,
+      nodesTotal: 0,
+      nodesReady: 0,
+      podsPending: 0,
+      podsCrashLoop: 0,
+      deploymentsTotal: 0,
+      deploymentsUnhealthy: 0,
+    });
+    expect(samples).toEqual([{ metric: "k8s_apiserver_unreachable", value: 1 }]);
+  });
+
   it("skips k8s unreachable alerts when collection is disabled", () => {
     const samples = samplesFromKubernetes({
       clusterId: "default",
